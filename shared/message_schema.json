@@ -6,6 +6,7 @@
     "post_path": "/v1/events",
     "health_path": "/health",
     "readback_path": "/v1/jobs/{job_id}",
+    "lights_path": "/v1/lights",
     "auth_header": "Authorization: Bearer <token>",
     "content_type": "application/json",
     "default_port": 8090

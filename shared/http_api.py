@@ -3,6 +3,7 @@
 POST /v1/events stores one validated message.
 GET /v1/jobs/<job_id> reads that job back. Both require the bearer token.
 GET /health answers {"status": "ok"} and includes no job data.
+GET /v1/lights returns the current light state and requires the same bearer token.
 """
 
 from __future__ import annotations
@@ -21,6 +22,26 @@ HEALTH_BODY = {"status": "ok", "service": "still-loading"}
 class StillLoadingServer(ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+
+
+def _lights_body(engine) -> dict:
+    """Current lights. No token and no event log."""
+    if engine is None:
+        return {
+            "state": "idle",
+            "code": 0,
+            "job_id": None,
+            "progress": 0,
+            "sequence": 0,
+        }
+    view = engine.view
+    return {
+        "state": view.state,
+        "code": view.code,
+        "job_id": view.job_id,
+        "progress": view.progress,
+        "sequence": view.sequence,
+    }
 
 
 def _json_bytes(payload: dict) -> bytes:
@@ -80,6 +101,11 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
             if path == "/health":
                 self._send(200, HEALTH_BODY)
                 return
+            if path == "/v1/lights":
+                if not self._authorized():
+                    return
+                self._send(200, _lights_body(engine))
+                return
             prefix = "/v1/jobs/"
             if path.startswith(prefix):
                 if not self._authorized():
@@ -113,7 +139,7 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 {
                     "status": "not_found",
                     "reason": "unknown_path",
-                    "detail": "Use GET /health or GET /v1/jobs/<job_id>",
+                    "detail": "Use GET /health, GET /v1/lights, or GET /v1/jobs/<job_id>",
                 },
             )
 

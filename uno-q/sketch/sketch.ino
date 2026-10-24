@@ -134,6 +134,8 @@ void render(unsigned long ms) {
     paint_led3(0, 70, 0);
     draw_check();
   } else {
+    // State 0, idle. The moving dots are this idle pattern.
+    // They stay until set_job_lights receives another code.
     paint_led3(6, 6, 10);
     draw_three_dots(2, (ms / 700) % 3);
   }

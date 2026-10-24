@@ -63,6 +63,7 @@ Transport, all from the Python standard library:
 
 - `POST /v1/events` with `Content-Type: application/json` and `Authorization: Bearer <token>`
 - `GET /v1/jobs/<job_id>` with the same header, to read the latest stored event
+- `GET /v1/lights` returns the current light state and uses the same bearer token
 - `GET /health` returns `{"status":"ok","service":"still-loading"}` and no job data
 
 Default port: **8090**. The token is a shared secret you create. It is separate from your Wi-Fi password. Put it in `mac-agent/config.local.json`, which git ignores. Copy the shape from `mac-agent/config.example.json`.
@@ -174,7 +175,7 @@ The receiver decides the state on its own clock. A missing heartbeat is `suspect
 
 The matrix cannot show red, amber, or green. Those colors are on LED 3. LED 4 is unused. Linux LEDs 1 and 2 are unused.
 
-The HTTP reply is unchanged. The receiver also prints a line such as `lights running job=abc progress=0` and writes `/tmp/still-loading-lights.json`. That file has no token.
+The event replies are unchanged. The receiver prints a line such as `lights running job=abc progress=0`. App Lab does not read `/tmp/still-loading-lights.json`, because that folder is not shared with the App Lab process. App Lab calls `GET /v1/lights` on port 8090 with the same token, then `Bridge.call("set_job_lights", code, progress)`.
 
 Test the engine on the Mac:
 
@@ -213,9 +214,10 @@ Your receiver is already running the previous code. Restart it so it loads the s
    ```
 
    The SSH window should add `lights running`. About 6 seconds later it should add `lights suspected_stall`. That stall is the missing heartbeat. It is not a failure.
-5. Open Arduino App Lab. Create a new app. Paste `uno-q/sketch/sketch.ino` into the Sketch tab. Paste `uno-q/app_lab_main.py` into the Python tab.
-6. Press **Run** in App Lab. This is the step that uploads the sketch to the microcontroller. Leave the SSH receiver running. The App Lab Python file does not use port 8090.
-7. Send the probe again. LED 3 should pulse blue, then after about 6 seconds blink magenta. The matrix should show three dots. If the SSH window prints `lights running` and the LEDs stay dark, the sketch is not receiving Bridge calls yet. Copy those SSH lines into the chat. Do not send the token.
+5. Open the App Lab app you already uploaded. Replace the Python tab with the new `uno-q/app_lab_main.py`. In that editor, set `TOKEN_OVERRIDE` to the same token the SSH receiver already uses. Leave that change on the board. Do not copy it back into git, and do not make a new token.
+6. If the App Lab log later says the lights endpoint is unreachable, also set `LIGHTS_URL_OVERRIDE = "http://192.168.1.5:8090"`.
+7. Press **Run** in App Lab. The sketch can stay as it is if it already contains `set_job_lights`. Leave the SSH receiver running. This Python file does not listen on port 8090.
+8. Send the probe from step 4 again. The App Lab log should show `forwarded running code=1 progress=0`. LED 3 should pulse blue. About 6 seconds later the log should show `forwarded suspected_stall`. The moving three dots you see before that are the idle pattern, because no light code has arrived yet. If SSH prints `lights running` and App Lab prints `unreachable`, paste both logs here and leave the token out.
 
 To see red, from the Mac:
 

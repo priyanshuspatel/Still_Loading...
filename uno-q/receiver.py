@@ -1,10 +1,10 @@
 """Run the Still Loading receiver on the UNO Q Linux side, or on the Mac for a local test.
 
 This process listens on the network. It does not flash the microcontroller.
-When a light state changes it writes /tmp/still-loading-lights.json and,
-if the Bridge library is installed in this Python, calls set_job_lights.
-The sketch in uno-q/sketch plays the pattern. Port 8090 and the token
-check are unchanged.
+When a light state changes it prints a line. App Lab reads that state
+with GET /v1/lights on this same port, using the same bearer token.
+A status file under /tmp is only a local note. App Lab does not read it.
+Port 8090 and the token check are unchanged.
 
     export STILL_LOADING_TOKEN='paste-the-same-token-you-put-on-the-mac'
     python3 uno-q/receiver.py --host 0.0.0.0 --port 8090

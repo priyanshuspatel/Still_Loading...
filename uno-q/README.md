@@ -1,6 +1,6 @@
 # UNO Q receiver
 
-This folder is the Linux-side program for Phase 2. It listens for JSON job events over Wi-Fi. It does not light the LEDs and it does not use Bridge. Bridge is the on-board link between Linux and the microcontroller, and a later phase will use it.
+`receiver.py` listens for JSON job events over Wi-Fi on port 8090. App Lab reads `GET /v1/lights` from that same receiver and calls Bridge. The two processes do not share `/tmp`.
 
 Start it only after the board is on your Wi-Fi. The click-by-click setup, the token, and the Mac probe command are in the repository `README.md`.
 

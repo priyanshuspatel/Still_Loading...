@@ -118,5 +118,5 @@ still-loading/
 - Default heartbeat timeout is 6 seconds. Default slow-progress gap is 6 seconds. A heartbeat after `suspected_stall` returns the job to `running`.
 - Progress can continue during a stall, matching the simulator's `hang` mode, and that progress does not clear the stall and does not set `failed`.
 - LED 3 and the matrix are driven by `uno-q/sketch/sketch.ino` through `Bridge.provide("set_job_lights", ...)`, the same provider style as the official `set_led3_color` example. The matrix uses `Arduino_LED_Matrix` with 3-bit grayscale. The matrix is blue, so color is LED 3 only.
-- The SSH receiver tries `Bridge.call` when `arduino.app_utils` imports, and it also writes `/tmp/still-loading-lights.json` for `uno-q/app_lab_main.py`. Neither path has been confirmed on the board.
+- App Lab cannot see the receiver's `/tmp`. The receiver now answers `GET /v1/lights` with the same bearer token. `uno-q/app_lab_main.py` polls that URL, trying the container default gateway, `host.docker.internal`, and `127.0.0.1`, then calls `Bridge.call("set_job_lights", code, progress)`. This path is tested on the Mac and has not been confirmed on the board since the change.
 - On 24 October 2026, `python3 -m unittest discover -s mac-agent/tests -t mac-agent -v` reported 30 tests OK in 3.123 seconds. That run did not contact 192.168.1.5.
