@@ -16,7 +16,7 @@ The folder on disk is `still-loading`.
 | HTTP delivery and token check | Working. Your probe to `192.168.1.5:8090` was accepted. |
 | State engine | Implemented and covered by Mac tests. |
 | LED 3 and the 8×13 matrix | Sketch is written from the official Bridge and matrix examples. Not yet verified on the board. |
-| Real command-line jobs | Not built. |
+| Real command-line jobs | Phase 4.1. `run_job.py` watches one local command. |
 | AI error explanations | Not built. |
 
 ## Run the simulator
@@ -39,6 +39,25 @@ python3 job_agent.py --mode fail --fast
 Leave `--fast` off to watch a run in real time. `fail` takes about 10 seconds. The other modes take about 20 seconds.
 
 `heartbeat_paused` and `scenario_ended` are notes for you at the terminal. The sender does not forward them.
+
+## Run a real command
+
+The simulator is still there. This command watches a real program instead. Put the program and its arguments after `--`. They are started as a normal process, not as a shell line.
+
+```bash
+cd ~/still-loading/mac-agent
+python3 run_job.py -- python3 -c "import time; print('working 40%'); time.sleep(3); print('working 90%')"
+```
+
+Stdout shows JSON events: `started`, a `heartbeat` about every 2 seconds, `progress` when a line contains a percent, then `completed` or `failed`. A quiet command that prints nothing still ends as `completed` when its exit code is 0. Exit code 0 is `completed`. Any other exit code is `failed`.
+
+The command's own stdout and stderr are captured separately and are not copied into the JSON. The last stderr line of `run_job.py` itself shows the process id, elapsed time, exit code, and how many bytes were captured.
+
+To send that same run to a receiver you already started, add `--send`. This uses the existing token and does not print it:
+
+```bash
+python3 run_job.py --send --config config.local.json -- python3 -c "import time; time.sleep(3)"
+```
 
 ## Messages
 
@@ -96,7 +115,7 @@ cd ~/still-loading
 python3 -m unittest discover -s mac-agent/tests -t mac-agent -v
 ```
 
-On 24 October 2026 that command reported **20 tests, OK**, in about 3 seconds. Eight of those are the original simulator tests.
+The suite covers the simulator, the HTTP protocol, the state engine, light forwarding, and the local process runner. It does not contact the Arduino. On 24 October 2026 that command reported **46 tests, OK**, in 5.607 seconds.
 
 ## Put the receiver on the UNO Q
 
@@ -229,4 +248,4 @@ The board should end on `lights failed`. LED 3 should be red and the matrix shou
 
 ## What is next
 
-AI explanations of log output stay for a later phase. The next check is the light test above.
+Phase 4.1 watches a real command on the Mac. AI explanations of the captured output stay for a later phase.

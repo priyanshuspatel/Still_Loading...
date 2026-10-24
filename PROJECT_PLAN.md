@@ -50,6 +50,8 @@ still-loading/
 │   ├── simulator.py          scenarios and the local event clock
 │   ├── sender.py             HTTP client
 │   ├── send_events.py        send a scenario or one probe
+│   ├── runner.py             local process capture and events
+│   ├── run_job.py            command line for one real Mac command
 │   ├── config.example.json   host, port, and token placeholders
 │   └── tests/
 ├── shared/
@@ -89,8 +91,9 @@ still-loading/
 | 2 | Message schema, validation, Mac sender, and Linux-side receiver | You confirmed a probe to 192.168.1.5:8090. The protocol was left unchanged in Phase 3. |
 | 3 | State engine plus the first LED 3 and matrix sketch | Mac tests done in this session. The sketch has not been run on the board. |
 | 4 | Confirm Bridge on the real board and adjust the sketch only if a light test fails | Waiting on the hardware steps in the README. |
+| 4.1 | Watch one real Mac command and emit the existing job events | Mac tests in this session. The board protocol was not changed. |
 | 5 | Matrix and RGB polish after a real look at the patterns | Not started |
-| 6 | One real macOS command, with exit code and a short log excerpt | Not started |
+| 6 | Short log excerpts on failure, still without an AI explanation | Not started. Phase 4.1 records the exit code and keeps the captured text off the wire. |
 | 7 | Failure explanations. Rules first. A model only after a feasibility check. | Not started |
 | 8 | Demo script and a list of what was verified on the hardware | Not started |
 
@@ -120,3 +123,11 @@ still-loading/
 - LED 3 and the matrix are driven by `uno-q/sketch/sketch.ino` through `Bridge.provide("set_job_lights", ...)`, the same provider style as the official `set_led3_color` example. The matrix uses `Arduino_LED_Matrix` with 3-bit grayscale. The matrix is blue, so color is LED 3 only.
 - App Lab cannot see the receiver's `/tmp`. The receiver now answers `GET /v1/lights` with the same bearer token. `uno-q/app_lab_main.py` polls that URL, trying the container default gateway, `host.docker.internal`, and `127.0.0.1`, then calls `Bridge.call("set_job_lights", code, progress)`. This path is tested on the Mac and has not been confirmed on the board since the change.
 - On 24 October 2026, `python3 -m unittest discover -s mac-agent/tests -t mac-agent -v` reported 30 tests OK in 3.123 seconds. That run did not contact 192.168.1.5.
+
+## Phase 4.1 decisions
+
+- A real command is a list of arguments passed to `subprocess.Popen` with `shell=False`. A single shell string is refused.
+- Stdout and stderr are read on separate threads and stored in separate strings. The JSON events do not include either stream, so a captured secret is not sent to the board.
+- Exit code 0 is `completed` with progress 100. Any other exit code is `failed`. Text on stderr does not change that. A process with no output still receives heartbeats and is not marked failed.
+- `progress` is sent only when a captured line contains an explicit percent, such as `40%`.
+- The process id, start time, and captured text stay on the Mac. The board still receives schema version 1 events through the existing sender. `--send` is optional and is not used by the tests.
