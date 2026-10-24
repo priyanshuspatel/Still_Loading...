@@ -1,90 +1,80 @@
+"""Print simulated Still Loading... job events as JSON lines.
+
+This program stays on the Mac. It does not talk to the Arduino UNO Q.
+
+Examples:
+    python3 job_agent.py --mode normal
+    python3 job_agent.py --mode fail --fast
+"""
+
+from __future__ import annotations
 
 import argparse
 import json
-import time
-import uuid
+import sys
+from datetime import datetime, timezone
 
-HEARTBEAT_INTERVAL = 2.0
-
-
-def emit(event, job_id, started, **extra):
-    message = {
-        "event": event,
-        "job_id": job_id,
-        "elapsed_seconds": round(time.monotonic() - started, 1),
-        **extra,
-    }
-    print(json.dumps(message), flush=True)
+from simulator import MODES, ManualClock, SystemClock, new_job_id, run_scenario
 
 
-def run(mode):
-    job_id = str(uuid.uuid4())[:8]
-    started = time.monotonic()
-    duration = 20
-    last_heartbeat = started
-    last_progress = started
-    progress = 0
-
-    emit("started", job_id, started, mode=mode, progress=0)
-
-    while True:
-        now = time.monotonic()
-        elapsed = now - started
-
-        if mode == "fail" and elapsed >= 10:
-            emit(
-                "failed",
-                job_id,
-                started,
-                progress=progress,
-                message="Simulated build error",
-            )
-            return
-
-        if elapsed >= duration:
-            emit("completed", job_id, started, progress=100)
-            return
-
-        # Simulate a task that stops sending heartbeats.
-        heartbeat_allowed = not (
-            mode == "hang" and elapsed >= 8
-        )
-
-        if (
-            heartbeat_allowed
-            and now - last_heartbeat >= HEARTBEAT_INTERVAL
-        ):
-            last_heartbeat = now
-            emit(
-                "heartbeat",
-                job_id,
-                started,
-                progress=progress,
-            )
-
-        progress_interval = 8 if mode == "slow" else 3
-
-        if now - last_progress >= progress_interval:
-            last_progress = now
-            progress = min(99, int(elapsed / duration * 100))
-            emit(
-                "progress",
-                job_id,
-                started,
-                progress=progress,
-            )
-
-        time.sleep(0.25)
-
-
-if __name__ == "__main__":
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Still Loading... heartbeat simulator"
     )
     parser.add_argument(
         "--mode",
-        choices=["normal", "slow", "hang", "fail"],
+        choices=MODES,
         default="normal",
+        help=(
+            "normal finishes on time, slow reports progress less often, "
+            "hang stops heartbeats without failing, fail ends with an error"
+        ),
     )
-    args = parser.parse_args()
-    run(args.mode)
+    parser.add_argument(
+        "--job-id",
+        default=None,
+        help="Optional fixed job id. A short random id is used when omitted.",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Print the full scenario immediately instead of waiting about 20 seconds.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    job_id = args.job_id or new_job_id()
+    if args.fast:
+        clock = ManualClock(wall_origin=datetime.now(timezone.utc))
+        pace = "fast (no waiting)"
+    else:
+        clock = SystemClock()
+        pace = "real time"
+
+    print(
+        f"Still Loading... simulator | mode={args.mode} | job_id={job_id} | {pace}",
+        file=sys.stderr,
+    )
+    print(
+        "Each line on stdout is one JSON event. Heartbeats are separate from progress.",
+        file=sys.stderr,
+    )
+
+    def emit(event: dict) -> None:
+        print(json.dumps(event), flush=True)
+
+    try:
+        run_scenario(args.mode, job_id, clock, emit)
+    except KeyboardInterrupt:
+        print(
+            "\nStopped. This only prints simulated events on your Mac.",
+            file=sys.stderr,
+        )
+        return 130
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

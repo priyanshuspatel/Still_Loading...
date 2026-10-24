@@ -1,0 +1,5 @@
+{
+  "host": "my-uno-q.local",
+  "port": 8090,
+  "token": "replace-with-the-output-of-secrets.token_hex"
+}

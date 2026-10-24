@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "description": "One JSON object per job event. The Mac POSTs it to the UNO Q over the local network. Bridge is not used for this hop.",
+  "transport": {
+    "protocol": "HTTP",
+    "post_path": "/v1/events",
+    "health_path": "/health",
+    "readback_path": "/v1/jobs/{job_id}",
+    "auth_header": "Authorization: Bearer <token>",
+    "content_type": "application/json",
+    "default_port": 8090
+  },
+  "wire_events": ["started", "heartbeat", "progress", "failed", "completed"],
+  "simulator_only_events": ["heartbeat_paused", "scenario_ended"],
+  "required_fields": [
+    "schema_version",
+    "event",
+    "job_id",
+    "sequence",
+    "timestamp",
+    "elapsed_seconds",
+    "progress",
+    "is_failure"
+  ],
+  "event_fields": {
+    "failed": ["message", "exit_code"],
+    "completed": ["exit_code"]
+  },
+  "optional_fields": ["mode", "source"],
+  "sequence_rule": "For each job_id, accept a message only when its sequence is greater than the highest sequence already accepted. An equal sequence is a duplicate. A lower sequence is stale. After failed or completed, a later sequence is rejected."
+}
