@@ -52,13 +52,16 @@ still-loading/
 │   ├── send_events.py        send a scenario or one probe
 │   ├── runner.py             local process capture and events
 │   ├── run_job.py            command line for one real Mac command
+│   ├── battery.py            pmset battery parser and deduplicating reporter
+│   ├── battery_monitor.py    CLI for MacBook battery updates and display mode
 │   ├── config.example.json   host, port, and token placeholders
 │   └── tests/
 ├── shared/
 │   ├── message_schema.json
 │   ├── messages.py           validation and per-job sequence log
 │   ├── http_api.py           receiver implementation
-│   ├── state_engine.py       light state from accepted events
+│   ├── state_engine.py       light state and job/battery display priority
+│   ├── matrix_display.py     8×13 pixel font, frames, and animation timeline
 │   └── lights.py             print, status file, optional Bridge call
 └── uno-q/
     ├── README.md
@@ -89,10 +92,10 @@ still-loading/
 | 0 | Audit the repo, check the UNO Q docs, write this plan | Done in this session |
 | 1 | Reliable local simulator and tests | Done in this session. See README for the commands and results. |
 | 2 | Message schema, validation, Mac sender, and Linux-side receiver | You confirmed a probe to 192.168.1.5:8090. The protocol was left unchanged in Phase 3. |
-| 3 | State engine plus the first LED 3 and matrix sketch | Mac tests done in this session. The sketch has not been run on the board. |
-| 4 | Confirm Bridge on the real board and adjust the sketch only if a light test fails | Waiting on the hardware steps in the README. |
-| 4.1 | Watch one real Mac command and emit the existing job events | Mac tests in this session. The board protocol was not changed. |
-| 5 | Matrix and RGB polish after a real look at the patterns | Not started |
+| 3 | State engine plus the first LED 3 and matrix sketch | Mac tests done in this session. Verified on the board in Phase 4. |
+| 4 | Confirm Bridge on the real board and adjust the sketch only if a light test fails | Verified on real UNO Q hardware (HTTP `/v1/lights` -> App Lab `Bridge.call` -> LED 3 + 8×13 matrix). |
+| 4.1 | Watch one real Mac command and emit the existing job events | Verified on Mac and on real UNO Q hardware with `run_job.py --send`. |
+| 5 | Matrix and RGB polish, live `%` display, and MacBook battery indicator | Implemented and verified by 58 Mac tests. Ready for manual App Lab hardware check. |
 | 6 | Short log excerpts on failure, still without an AI explanation | Not started. Phase 4.1 records the exit code and keeps the captured text off the wire. |
 | 7 | Failure explanations. Rules first. A model only after a feasibility check. | Not started |
 | 8 | Demo script and a list of what was verified on the hardware | Not started |
@@ -131,3 +134,19 @@ still-loading/
 - Exit code 0 is `completed` with progress 100. Any other exit code is `failed`. Text on stderr does not change that. A process with no output still receives heartbeats and is not marked failed.
 - `progress` is sent only when a captured line contains an explicit percent, such as `40%`.
 - The process id, start time, and captured text stay on the Mac. The board still receives schema version 1 events through the existing sender. `--send` is optional and is not used by the tests.
+- You verified Phase 4 and Phase 4.1 on the physical UNO Q with a real Mac process sending `started`, `heartbeat`, `progress`, and `completed` events.
+
+## Phase 5 decisions
+
+- Kept `POST /v1/events`, `GET /v1/jobs/<job_id>`, `GET /v1/lights`, `GET /health`, and `Bridge.provide("set_job_lights", ...)` backward-compatible.
+- Added `shared/matrix_display.py` and mirrored its 8×13 bitmaps and timing constants in `uno-q/sketch/sketch.ino`:
+  - Job start: two gentle centered heart blinks before entering the running cycle.
+  - Running: cycles locally on the MCU between live numeric percentage (`1%`–`99%`, or `100` with a full row-7 bar), three waiting dots (`...`), and an occasional heart pulse.
+  - Unknown progress: when no `progress` event has arrived yet (`progress_known` is false / `progress == 0`), the display uses waiting dots and heartbeats and never fabricates `0%`.
+  - `100%` compact representation: rendered as three 3×5 digits (`100` across columns 1–11) plus a full 13-pixel bar on row 7 so it fits the 8×13 matrix cleanly.
+  - Completed: 3 gentle heart beats, then `100` for 1.8 seconds, then settles into a calm steady checkmark.
+  - Failed: steady `X` with corner markers and red LED 3, distinct from all waiting, slow, stall, and completion patterns.
+- Added `mac-agent/battery.py` and `mac-agent/battery_monitor.py` using `pmset -g batt` (`shell=False`, no root privileges) and authenticated `POST /v1/battery` + `POST /v1/display-mode`.
+- Active and failed jobs take priority by default (`auto` mode) and battery messages never enter `JobLog` or overwrite job state. Explicit `battery` mode uses state codes `6` (`battery`), `7` (`battery_charging`), and `8` (`battery_unavailable` showing `--`).
+- Documented the macOS lid-closed sleep limitation clearly in `README.md`.
+- On 25 October 2026, `python3 -m unittest discover -s mac-agent/tests -t mac-agent -v` reported 58 tests OK in 7.616 seconds.

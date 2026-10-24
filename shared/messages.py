@@ -38,6 +38,17 @@ OPTIONAL_FIELDS = frozenset({"mode", "source"})
 TERMINAL_EVENTS = frozenset({"failed", "completed"})
 _JOB_ID_EXTRA = frozenset("-_")
 
+BATTERY_CHARGING_STATES = frozenset({"charging", "discharging", "full", "unknown"})
+DISPLAY_MODES = frozenset({"auto", "job", "battery"})
+BATTERY_REQUIRED_FIELDS = (
+    "schema_version",
+    "kind",
+    "percent",
+    "charging_state",
+    "timestamp",
+)
+BATTERY_OPTIONAL_FIELDS = frozenset({"display_mode", "return_to_battery"})
+
 
 class ProtocolError(Exception):
     """A message or request the receiver can answer with an HTTP status."""
@@ -195,6 +206,82 @@ def validate_message(message: dict) -> dict:
         if "message" in message or "exit_code" in message:
             _reject("unknown_field", f"{event} events do not take message or exit_code")
 
+    return message
+
+
+def validate_battery_message(message: dict) -> dict:
+    """Validate a Mac battery status payload for POST /v1/battery.
+
+    Battery messages are separate from job events and never enter JobLog.
+    """
+    if not isinstance(message, dict):
+        _reject("not_an_object", "Battery message must be a JSON object")
+
+    missing = [field for field in BATTERY_REQUIRED_FIELDS if field not in message]
+    if missing:
+        _reject("missing_field", "Battery message is missing " + ", ".join(missing))
+
+    allowed = set(BATTERY_REQUIRED_FIELDS) | BATTERY_OPTIONAL_FIELDS
+    unknown = sorted(set(message) - allowed)
+    if unknown:
+        _reject(
+            "unknown_field",
+            "Battery message has unknown fields: " + ", ".join(unknown),
+        )
+
+    if message["schema_version"] != SCHEMA_VERSION:
+        _reject("bad_schema_version", "schema_version must be 1")
+
+    if message["kind"] != "battery":
+        _reject("invalid_field", "kind must be 'battery'")
+
+    percent = _require_int(message["percent"], "percent")
+    if not 0 <= percent <= 100:
+        _reject("invalid_field", "percent must be from 0 to 100")
+
+    charging_state = message["charging_state"]
+    if not isinstance(charging_state, str) or charging_state not in BATTERY_CHARGING_STATES:
+        _reject(
+            "invalid_field",
+            "charging_state must be charging, discharging, full, or unknown",
+        )
+
+    timestamp = message["timestamp"]
+    if (
+        not isinstance(timestamp, str)
+        or len(timestamp) != 24
+        or timestamp[10] != "T"
+        or not timestamp.endswith("Z")
+    ):
+        _reject("invalid_field", "timestamp must look like 2026-01-01T00:00:00.000Z")
+
+    if "display_mode" in message:
+        mode = message["display_mode"]
+        if not isinstance(mode, str) or mode not in DISPLAY_MODES:
+            _reject("invalid_field", "display_mode must be auto, job, or battery")
+
+    if "return_to_battery" in message:
+        _require_bool(message["return_to_battery"], "return_to_battery")
+
+    return message
+
+
+def validate_display_mode_message(message: dict) -> dict:
+    """Validate a mode selection payload for POST /v1/display-mode."""
+    if not isinstance(message, dict):
+        _reject("not_an_object", "Display mode message must be a JSON object")
+    allowed = {"display_mode", "return_to_battery"}
+    unknown = sorted(set(message) - allowed)
+    if unknown:
+        _reject(
+            "unknown_field",
+            "Display mode message has unknown fields: " + ", ".join(unknown),
+        )
+    mode = message.get("display_mode")
+    if not isinstance(mode, str) or mode not in DISPLAY_MODES:
+        _reject("invalid_field", "display_mode must be auto, job, or battery")
+    if "return_to_battery" in message:
+        _require_bool(message["return_to_battery"], "return_to_battery")
     return message
 
 

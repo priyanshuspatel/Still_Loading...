@@ -14,7 +14,14 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from messages import JobLog, ProtocolError, parse_json_object, token_is_long_enough
+from messages import (
+    JobLog,
+    ProtocolError,
+    parse_json_object,
+    token_is_long_enough,
+    validate_battery_message,
+    validate_display_mode_message,
+)
 
 HEALTH_BODY = {"status": "ok", "service": "still-loading"}
 
@@ -33,6 +40,9 @@ def _lights_body(engine) -> dict:
             "job_id": None,
             "progress": 0,
             "sequence": 0,
+            "progress_known": False,
+            "display_mode": "auto",
+            "charging_state": None,
         }
     view = engine.view
     return {
@@ -41,6 +51,27 @@ def _lights_body(engine) -> dict:
         "job_id": view.job_id,
         "progress": view.progress,
         "sequence": view.sequence,
+        "progress_known": view.progress_known,
+        "display_mode": view.display_mode,
+        "charging_state": view.charging_state,
+    }
+
+
+def _battery_body(engine) -> dict:
+    if engine is None or engine.battery_view is None:
+        return {
+            "available": False,
+            "percent": None,
+            "charging_state": "unknown",
+            "display_mode": "auto" if engine is None else engine.display_mode,
+        }
+    battery = engine.battery_view
+    return {
+        "available": True,
+        "percent": battery.percent,
+        "charging_state": battery.charging_state,
+        "timestamp": battery.timestamp,
+        "display_mode": engine.display_mode,
     }
 
 
@@ -106,6 +137,11 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                     return
                 self._send(200, _lights_body(engine))
                 return
+            if path == "/v1/battery":
+                if not self._authorized():
+                    return
+                self._send(200, _battery_body(engine))
+                return
             prefix = "/v1/jobs/"
             if path.startswith(prefix):
                 if not self._authorized():
@@ -143,19 +179,7 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 },
             )
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
-            if self.path.split("?", 1)[0] != "/v1/events":
-                self._send(
-                    404,
-                    {
-                        "status": "not_found",
-                        "reason": "unknown_path",
-                        "detail": "POST messages to /v1/events",
-                    },
-                )
-                return
-            if not self._authorized():
-                return
+        def _read_json_body(self) -> dict | None:
             content_type = self.headers.get("Content-Type", "")
             if "application/json" not in content_type:
                 self._send(
@@ -166,7 +190,7 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                         "detail": "Content-Type must be application/json",
                     },
                 )
-                return
+                return None
             length_header = self.headers.get("Content-Length")
             if length_header is None:
                 self._send(
@@ -177,7 +201,7 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                         "detail": "Content-Length is required",
                     },
                 )
-                return
+                return None
             try:
                 length = int(length_header)
             except ValueError:
@@ -191,10 +215,90 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                         "detail": "Message is larger than 8192 bytes",
                     },
                 )
-                return
+                return None
             raw = self.rfile.read(length)
             try:
-                message = parse_json_object(raw)
+                return parse_json_object(raw)
+            except ProtocolError as exc:
+                self._send(
+                    exc.status,
+                    {"status": "rejected", "reason": exc.reason, "detail": exc.detail},
+                )
+                return None
+
+        def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+            path = self.path.split("?", 1)[0]
+            if path not in {"/v1/events", "/v1/battery", "/v1/display-mode"}:
+                self._send(
+                    404,
+                    {
+                        "status": "not_found",
+                        "reason": "unknown_path",
+                        "detail": "POST messages to /v1/events, /v1/battery, or /v1/display-mode",
+                    },
+                )
+                return
+            if not self._authorized():
+                return
+            message = self._read_json_body()
+            if message is None:
+                return
+
+            if path == "/v1/battery":
+                try:
+                    checked = validate_battery_message(message)
+                    if engine is not None:
+                        engine.apply_battery(checked)
+                except ProtocolError as exc:
+                    self._send(
+                        exc.status,
+                        {"status": "rejected", "reason": exc.reason, "detail": exc.detail},
+                    )
+                    return
+                if announce:
+                    print(
+                        f"accepted battery {checked['percent']}% ({checked['charging_state']})",
+                        flush=True,
+                    )
+                self._send(
+                    202,
+                    {
+                        "status": "accepted",
+                        "kind": "battery",
+                        "percent": checked["percent"],
+                        "charging_state": checked["charging_state"],
+                        "display_mode": "auto" if engine is None else engine.display_mode,
+                    },
+                )
+                return
+
+            if path == "/v1/display-mode":
+                try:
+                    checked = validate_display_mode_message(message)
+                    if engine is not None:
+                        engine.set_display_mode(
+                            checked["display_mode"],
+                            return_to_battery=checked.get("return_to_battery"),
+                        )
+                except ProtocolError as exc:
+                    self._send(
+                        exc.status,
+                        {"status": "rejected", "reason": exc.reason, "detail": exc.detail},
+                    )
+                    return
+                if announce:
+                    print(f"display_mode set to {checked['display_mode']}", flush=True)
+                self._send(
+                    200,
+                    {
+                        "status": "ok",
+                        "display_mode": checked["display_mode"],
+                        "lights": _lights_body(engine),
+                    },
+                )
+                return
+
+            try:
                 stored = job_log.accept(message)
             except ProtocolError as exc:
                 self._send(

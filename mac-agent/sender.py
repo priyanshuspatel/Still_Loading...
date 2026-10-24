@@ -130,3 +130,105 @@ def get_job(base_url: str, token: str, job_id: str, timeout: float = 2.0) -> dic
 def events_for_board(events: list[dict]) -> list[dict]:
     """Keep wire events. Leave simulator-only lines on the Mac."""
     return [event for event in events if event.get("event") in WIRE_EVENTS]
+
+
+def post_battery(base_url: str, token: str, battery_message: dict, timeout: float = 2.0) -> dict:
+    """POST one battery reading to /v1/battery."""
+    body = json.dumps(battery_message).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/battery",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {"reason": "bad_response", "detail": raw[:200]}
+        delivery = "unauthorized" if exc.code == 401 else "rejected"
+        return {
+            "delivery": delivery,
+            "delivered": False,
+            "http_status": exc.code,
+            "reason": str(payload.get("reason", "rejected")),
+            "detail": str(payload.get("detail", "")),
+        }
+    except urllib.error.URLError as exc:
+        return {
+            "delivery": "connection_error",
+            "delivered": False,
+            "http_status": None,
+            "reason": "connection_error",
+            "detail": str(exc.reason),
+        }
+
+    accepted = status == 202 and payload.get("status") == "accepted"
+    return {
+        "delivery": "accepted" if accepted else "rejected",
+        "delivered": accepted,
+        "http_status": status,
+        "reason": str(payload.get("status", "")),
+        "detail": "Receiver stored the battery reading" if accepted else str(payload),
+    }
+
+
+def post_display_mode(
+    base_url: str,
+    token: str,
+    display_mode: str,
+    *,
+    return_to_battery: bool | None = None,
+    timeout: float = 2.0,
+) -> dict:
+    """POST display mode preference (auto, job, or battery) to /v1/display-mode."""
+    payload_in: dict = {"display_mode": display_mode}
+    if return_to_battery is not None:
+        payload_in["return_to_battery"] = bool(return_to_battery)
+    body = json.dumps(payload_in).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/display-mode",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return {
+                "delivery": "ok",
+                "delivered": response.status == 200,
+                "http_status": response.status,
+                "body": payload,
+            }
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {"detail": raw[:200]}
+        return {
+            "delivery": "unauthorized" if exc.code == 401 else "rejected",
+            "delivered": False,
+            "http_status": exc.code,
+            "body": payload,
+        }
+    except urllib.error.URLError as exc:
+        return {
+            "delivery": "connection_error",
+            "delivered": False,
+            "http_status": None,
+            "body": {"reason": "connection_error", "detail": str(exc.reason)},
+        }
+

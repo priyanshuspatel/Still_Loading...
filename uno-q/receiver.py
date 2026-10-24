@@ -51,6 +51,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="/tmp/still-loading-lights.json",
         help="Small status file the App Lab companion reads. It has no token.",
     )
+    parser.add_argument(
+        "--display-mode",
+        choices=("auto", "job", "battery"),
+        default="auto",
+        help="Default display priority: auto (jobs win), job, or battery.",
+    )
+    parser.add_argument(
+        "--return-to-battery",
+        action="store_true",
+        help="Return to battery display when a job completes in auto mode.",
+    )
     return parser
 
 
@@ -88,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             EngineConfig(
                 heartbeat_timeout_s=args.heartbeat_timeout,
                 slow_progress_gap_s=args.slow_gap,
+                display_mode=args.display_mode,
+                return_to_battery=args.return_to_battery,
             ),
             on_change=publisher.show,
         )

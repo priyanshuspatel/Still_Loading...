@@ -102,8 +102,8 @@ def bridge_args(payload: dict) -> tuple[int, int, str]:
     """Return (code, progress, state) for Bridge.call."""
     code = payload.get("code")
     progress = payload.get("progress")
-    if isinstance(code, bool) or not isinstance(code, int) or not 0 <= code <= 5:
-        raise ValueError("light code must be an integer from 0 to 5")
+    if isinstance(code, bool) or not isinstance(code, int) or not 0 <= code <= 8:
+        raise ValueError("light code must be an integer from 0 to 8")
     if isinstance(progress, bool) or not isinstance(progress, int) or not 0 <= progress <= 100:
         raise ValueError("progress must be an integer from 0 to 100")
     state = payload.get("state", "")

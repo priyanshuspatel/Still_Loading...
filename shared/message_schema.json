@@ -7,6 +7,8 @@
     "health_path": "/health",
     "readback_path": "/v1/jobs/{job_id}",
     "lights_path": "/v1/lights",
+    "battery_path": "/v1/battery",
+    "display_mode_path": "/v1/display-mode",
     "auth_header": "Authorization: Bearer <token>",
     "content_type": "application/json",
     "default_port": 8090
@@ -28,5 +30,11 @@
     "completed": ["exit_code"]
   },
   "optional_fields": ["mode", "source"],
+  "battery_message": {
+    "required_fields": ["schema_version", "kind", "percent", "charging_state", "timestamp"],
+    "optional_fields": ["display_mode", "return_to_battery"],
+    "charging_states": ["charging", "discharging", "full", "unknown"],
+    "display_modes": ["auto", "job", "battery"]
+  },
   "sequence_rule": "For each job_id, accept a message only when its sequence is greater than the highest sequence already accepted. An equal sequence is a duplicate. A lower sequence is stale. After failed or completed, a later sequence is rejected."
 }
