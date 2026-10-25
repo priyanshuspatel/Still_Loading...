@@ -88,19 +88,21 @@ def _draw_glyph(frame: list[list[int]], glyph: str, top_row: int, left_col: int,
 
 
 def _draw_percent_symbol(frame: list[list[int]], top_row: int, left_col: int, brightness: int) -> None:
-    """Draw the 4x5 '%' symbol mirrored in uno-q/sketch/sketch.ino."""
-    # Upper dot
+    """Draw the 5x5 '%' symbol mirrored in uno-q/sketch/sketch.ino."""
+    # Upper circle (shifted 1 LED unit left and closed as a complete 2x2 block)
+    set_pixel(frame, top_row, left_col - 1, brightness)
     set_pixel(frame, top_row, left_col, brightness)
-    set_pixel(frame, top_row, left_col + 1, brightness)
+    set_pixel(frame, top_row + 1, left_col - 1, brightness)
     set_pixel(frame, top_row + 1, left_col, brightness)
 
-    # Straight diagonal slash, from upper right to lower left
+    # Straight diagonal slash, from upper right to lower left (extended 1 LED unit downward)
     set_pixel(frame, top_row, left_col + 3, brightness)
     set_pixel(frame, top_row + 1, left_col + 2, brightness)
     set_pixel(frame, top_row + 2, left_col + 1, brightness)
     set_pixel(frame, top_row + 3, left_col, brightness)
+    set_pixel(frame, top_row + 4, left_col - 1, brightness)
 
-    # Lower dot
+    # Lower circle (complete 2x2 block)
     set_pixel(frame, top_row + 3, left_col + 2, brightness)
     set_pixel(frame, top_row + 3, left_col + 3, brightness)
     set_pixel(frame, top_row + 4, left_col + 2, brightness)
@@ -173,11 +175,11 @@ def render_percentage_frame(
         _draw_glyph(frame, "0", top_row=1, left_col=5, brightness=6)
         _draw_glyph(frame, "0", top_row=1, left_col=9, brightness=6)
     elif percent < 10:
-        _draw_glyph(frame, str(percent), top_row=1, left_col=3, brightness=6)
+        _draw_glyph(frame, str(percent), top_row=1, left_col=2, brightness=6)
         _draw_percent_symbol(frame, top_row=1, left_col=8, brightness=4)
     else:
-        _draw_glyph(frame, str(percent // 10), top_row=1, left_col=1, brightness=6)
-        _draw_glyph(frame, str(percent % 10), top_row=1, left_col=5, brightness=6)
+        _draw_glyph(frame, str(percent // 10), top_row=1, left_col=0, brightness=6)
+        _draw_glyph(frame, str(percent % 10), top_row=1, left_col=4, brightness=6)
         _draw_percent_symbol(frame, top_row=1, left_col=9, brightness=4)
 
     if percent == 100:

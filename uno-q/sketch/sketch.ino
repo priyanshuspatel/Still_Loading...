@@ -130,18 +130,20 @@ void draw_glyph(int glyph_index, int top_row, int left_col, uint8_t brightness) 
 }
 
 void draw_percent_symbol(int top_row, int left_col, uint8_t brightness) {
-  // Upper dot
+  // Upper circle (shifted 1 LED unit left and closed as a complete 2x2 block)
+  pixel(top_row, left_col - 1, brightness);
   pixel(top_row, left_col, brightness);
-  pixel(top_row, left_col + 1, brightness);
+  pixel(top_row + 1, left_col - 1, brightness);
   pixel(top_row + 1, left_col, brightness);
 
-  // Straight diagonal slash, from upper right to lower left
+  // Straight diagonal slash, from upper right to lower left (extended 1 LED unit downward)
   pixel(top_row, left_col + 3, brightness);
   pixel(top_row + 1, left_col + 2, brightness);
   pixel(top_row + 2, left_col + 1, brightness);
   pixel(top_row + 3, left_col, brightness);
+  pixel(top_row + 4, left_col - 1, brightness);
 
-  // Lower dot
+  // Lower circle (complete 2x2 block)
   pixel(top_row + 3, left_col + 2, brightness);
   pixel(top_row + 3, left_col + 3, brightness);
   pixel(top_row + 4, left_col + 2, brightness);
@@ -198,11 +200,11 @@ void draw_percentage(int percent, bool charging, bool slow, unsigned long ms) {
   }
 
   if (percent < 10) {
-    draw_glyph(percent, 1, 3, 6);
+    draw_glyph(percent, 1, 2, 6);
     draw_percent_symbol(1, 8, 4);
-    } else {
-    draw_glyph(percent / 10, 1, 1, 6);
-    draw_glyph(percent % 10, 1, 5, 6);
+  } else {
+    draw_glyph(percent / 10, 1, 0, 6);
+    draw_glyph(percent % 10, 1, 4, 6);
     draw_percent_symbol(1, 9, 4);
   }
 
