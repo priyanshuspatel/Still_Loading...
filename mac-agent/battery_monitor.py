@@ -19,7 +19,14 @@ ROOT = MAC_AGENT.parent
 sys.path.insert(0, str(ROOT / "shared"))
 sys.path.insert(0, str(MAC_AGENT))
 
-from battery import BatteryReporter, build_battery_message, read_macos_battery  # noqa: E402
+from battery import (  # noqa: E402
+    DEFAULT_MAX_BACKOFF_S,
+    DEFAULT_POLL_INTERVAL_S,
+    DEFAULT_REFRESH_INTERVAL_S,
+    BatteryReporter,
+    build_battery_message,
+    read_macos_battery,
+)
 from messages import DISPLAY_MODES, ProtocolError  # noqa: E402
 from send_events import resolve_target  # noqa: E402
 from sender import post_battery, post_display_mode  # noqa: E402
@@ -32,8 +39,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--interval",
         type=float,
-        default=30.0,
-        help="Seconds between battery checks. Default 30.",
+        default=DEFAULT_POLL_INTERVAL_S,
+        help="Seconds between battery checks. Default 15.",
+    )
+    parser.add_argument(
+        "--refresh-interval",
+        type=float,
+        default=DEFAULT_REFRESH_INTERVAL_S,
+        help="Seconds before re-sending an unchanged reading (default 300s / 5m; 0 disables).",
     )
     parser.add_argument(
         "--once",
@@ -47,13 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=tuple( sorted(DISPLAY_MODES) ),
+        choices=tuple(sorted(DISPLAY_MODES)),
         default=None,
         help="Optional display mode to include with battery updates (auto, job, or battery).",
     )
     parser.add_argument(
         "--set-mode",
-        choices=tuple( sorted(DISPLAY_MODES) ),
+        choices=tuple(sorted(DISPLAY_MODES)),
         default=None,
         help="Change the receiver display mode immediately and exit.",
     )
@@ -68,10 +81,61 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_monitor(
+    reporter: BatteryReporter,
+    *,
+    interval: float = DEFAULT_POLL_INTERVAL_S,
+    once: bool = False,
+    max_backoff: float = DEFAULT_MAX_BACKOFF_S,
+    sleep_fn=time.sleep,
+    max_cycles: int | None = None,
+    out_stream=None,
+    err_stream=None,
+) -> int:
+    """Run the continuous or one-shot battery polling loop with retry backoff."""
+    out = sys.stdout if out_stream is None else out_stream
+    err = sys.stderr if err_stream is None else err_stream
+    cycles = 0
+    try:
+        while True:
+            outcome = reporter.poll_once()
+            status = outcome["status"]
+            reading = outcome["reading"]
+            if status == "sent" and reading is not None:
+                print(
+                    f"battery {reading.percent}% ({reading.charging_state}) -> accepted",
+                    file=out,
+                    flush=True,
+                )
+            elif status == "unavailable":
+                print("battery unavailable; nothing sent", file=err, flush=True)
+            elif status == "delivery_failed":
+                delivery = outcome.get("delivery", {})
+                delay = reporter.next_delay(interval, max_backoff=max_backoff)
+                print(
+                    f"battery delivery {delivery.get('delivery')}: {delivery.get('detail')} "
+                    f"(retry in {delay:g}s)",
+                    file=err,
+                    flush=True,
+                )
+            if once:
+                return 0 if status in {"sent", "unchanged"} else 1
+            cycles += 1
+            if max_cycles is not None and cycles >= max_cycles:
+                return 0
+            sleep_fn(reporter.next_delay(interval, max_backoff=max_backoff))
+    except KeyboardInterrupt:
+        print("\nBattery monitor stopped.", file=err, flush=True)
+        return 130
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.interval <= 0:
         print("--interval must be greater than 0", file=sys.stderr)
+        return 2
+    if args.refresh_interval < 0:
+        print("--refresh-interval must be 0 or greater", file=sys.stderr)
         return 2
 
     if args.dry_run:
@@ -121,36 +185,19 @@ def main(argv: list[str] | None = None) -> int:
             return_to_battery=return_flag,
         )
 
+    refresh_s = args.refresh_interval if args.refresh_interval > 0 else None
     reporter = BatteryReporter(
         lambda msg: post_battery(base_url, token, msg),
         display_mode=args.mode,
         return_to_battery=return_flag,
+        refresh_interval_s=refresh_s,
     )
 
-    try:
-        while True:
-            outcome = reporter.poll_once()
-            status = outcome["status"]
-            reading = outcome["reading"]
-            if status == "sent" and reading is not None:
-                print(
-                    f"battery {reading.percent}% ({reading.charging_state}) -> accepted",
-                    flush=True,
-                )
-            elif status == "unavailable":
-                print("battery unavailable; nothing sent", file=sys.stderr)
-            elif status == "delivery_failed":
-                delivery = outcome.get("delivery", {})
-                print(
-                    f"battery delivery {delivery.get('delivery')}: {delivery.get('detail')}",
-                    file=sys.stderr,
-                )
-            if args.once:
-                return 0 if status in {"sent", "unchanged"} else 1
-            time.sleep(args.interval)
-    except KeyboardInterrupt:
-        print("\nBattery monitor stopped.", file=sys.stderr)
-        return 130
+    return run_monitor(
+        reporter,
+        interval=args.interval,
+        once=args.once,
+    )
 
 
 if __name__ == "__main__":

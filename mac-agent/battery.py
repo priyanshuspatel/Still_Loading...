@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -16,6 +17,10 @@ from messages import validate_battery_message
 from simulator import format_timestamp
 
 _BATT_LINE = re.compile(r"InternalBattery-\d+.*?(\d+)%\s*;\s*([^;\n]+)", re.IGNORECASE)
+
+DEFAULT_POLL_INTERVAL_S = 15.0
+DEFAULT_REFRESH_INTERVAL_S = 300.0
+DEFAULT_MAX_BACKOFF_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -104,8 +109,27 @@ def build_battery_message(
     return validate_battery_message(payload)
 
 
+def compute_backoff_delay(
+    interval: float,
+    consecutive_failures: int,
+    *,
+    max_backoff: float = DEFAULT_MAX_BACKOFF_S,
+) -> float:
+    """Return sleep duration in seconds after a poll.
+
+    Normal polls sleep for ``interval``. Consecutive delivery failures back off
+    exponentially (interval, 2*interval, 4*interval, ...) up to ``max_backoff``.
+    """
+    base = max(0.01, float(interval))
+    if consecutive_failures <= 0:
+        return base
+    cap = max(base, float(max_backoff))
+    delay = base * (2 ** (consecutive_failures - 1))
+    return min(cap, delay)
+
+
 class BatteryReporter:
-    """Send battery updates only when the reading or mode changes."""
+    """Send battery updates when the reading/mode changes or refresh interval elapses."""
 
     def __init__(
         self,
@@ -114,20 +138,44 @@ class BatteryReporter:
         read_fn=read_macos_battery,
         display_mode: str | None = None,
         return_to_battery: bool | None = None,
+        refresh_interval_s: float | None = DEFAULT_REFRESH_INTERVAL_S,
+        clock=time.monotonic,
     ) -> None:
         self._send_fn = send_fn
         self._read_fn = read_fn
         self.display_mode = display_mode
         self.return_to_battery = return_to_battery
+        self.refresh_interval_s = refresh_interval_s
+        self._clock = clock
         self._last_sent_key: tuple | None = None
+        self._last_sent_at: float | None = None
+        self._consecutive_failures: int = 0
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures
+
+    def next_delay(
+        self,
+        interval: float = DEFAULT_POLL_INTERVAL_S,
+        *,
+        max_backoff: float = DEFAULT_MAX_BACKOFF_S,
+    ) -> float:
+        return compute_backoff_delay(
+            interval,
+            self._consecutive_failures,
+            max_backoff=max_backoff,
+        )
 
     def poll_once(self, *, force: bool = False) -> dict:
+        now = float(self._clock())
         reading = self._read_fn()
         if reading is None:
             return {
                 "status": "unavailable",
                 "sent": False,
                 "reading": None,
+                "consecutive_failures": self._consecutive_failures,
             }
         key = (
             reading.percent,
@@ -135,11 +183,18 @@ class BatteryReporter:
             self.display_mode,
             self.return_to_battery,
         )
-        if not force and key == self._last_sent_key:
+        refresh_due = (
+            self._last_sent_at is not None
+            and self.refresh_interval_s is not None
+            and self.refresh_interval_s > 0
+            and (now - self._last_sent_at) >= self.refresh_interval_s
+        )
+        if not force and not refresh_due and key == self._last_sent_key:
             return {
                 "status": "unchanged",
                 "sent": False,
                 "reading": reading,
+                "consecutive_failures": self._consecutive_failures,
             }
 
         message = build_battery_message(
@@ -148,12 +203,29 @@ class BatteryReporter:
             return_to_battery=self.return_to_battery,
         )
         result = self._send_fn(message)
-        if result.get("delivered"):
+        delivered = bool(result.get("delivered"))
+        if delivered:
+            was_refresh = key == self._last_sent_key and not force
             self._last_sent_key = key
+            self._last_sent_at = now
+            self._consecutive_failures = 0
+            return {
+                "status": "sent",
+                "refreshed": was_refresh,
+                "sent": True,
+                "reading": reading,
+                "message": message,
+                "delivery": result,
+                "consecutive_failures": 0,
+            }
+
+        self._consecutive_failures += 1
         return {
-            "status": "sent" if result.get("delivered") else "delivery_failed",
-            "sent": bool(result.get("delivered")),
+            "status": "delivery_failed",
+            "refreshed": False,
+            "sent": False,
             "reading": reading,
             "message": message,
             "delivery": result,
+            "consecutive_failures": self._consecutive_failures,
         }

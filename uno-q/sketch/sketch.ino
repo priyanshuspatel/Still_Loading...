@@ -11,6 +11,7 @@
     6 = battery (discharging / full / normal percentage)
     7 = battery_charging (percentage + bottom charging pulse)
     8 = battery_unavailable (neutral '--' dashes, never a fake percentage)
+    9 = download (real-time download percentage + 100% -> checkmark on completion)
 
   RGB LED 3 indicates calm state color.
   The 8x13 blue LED matrix renders animations locally using millis()
@@ -60,7 +61,7 @@ const uint8_t GLYPHS[11][5] = {
   {0b111, 0b001, 0b001, 0b001, 0b001}, // 7
   {0b111, 0b101, 0b111, 0b101, 0b111}, // 8
   {0b111, 0b101, 0b111, 0b001, 0b111}, // 9
-  {0b101, 0b001, 0b010, 0b100, 0b101}  // % (index 10)
+  {0b110, 0b001, 0b010, 0b100, 0b011}  // % (index 10)
 };
 
 // 7x6 heart centered at columns 3..9, rows 1..6.
@@ -90,11 +91,11 @@ void show_frame() {
 }
 
 void set_job_lights(int state_code, int progress) {
-  if (state_code < 0 || state_code > 8) state_code = 0;
+  if (state_code < 0 || state_code > 9) state_code = 0;
   if (progress < 0) progress = 0;
   if (progress > 100) progress = 100;
 
-  if (state_code != current_state) {
+  if (state_code != current_state || (state_code == 9 && progress == 100 && current_progress != 100)) {
     state_entered_ms = millis();
   }
   current_state = state_code;
@@ -126,6 +127,25 @@ void draw_glyph(int glyph_index, int top_row, int left_col, uint8_t brightness) 
       }
     }
   }
+}
+
+void draw_percent_symbol(int top_row, int left_col, uint8_t brightness) {
+  // Upper dot
+  pixel(top_row, left_col, brightness);
+  pixel(top_row, left_col + 1, brightness);
+  pixel(top_row + 1, left_col, brightness);
+
+  // Straight diagonal slash, from upper right to lower left
+  pixel(top_row, left_col + 3, brightness);
+  pixel(top_row + 1, left_col + 2, brightness);
+  pixel(top_row + 2, left_col + 1, brightness);
+  pixel(top_row + 3, left_col, brightness);
+
+  // Lower dot
+  pixel(top_row + 3, left_col + 2, brightness);
+  pixel(top_row + 3, left_col + 3, brightness);
+  pixel(top_row + 4, left_col + 2, brightness);
+  pixel(top_row + 4, left_col + 3, brightness);
 }
 
 void draw_heart(uint8_t brightness, int progress) {
@@ -179,11 +199,11 @@ void draw_percentage(int percent, bool charging, bool slow, unsigned long ms) {
 
   if (percent < 10) {
     draw_glyph(percent, 1, 3, 6);
-    draw_glyph(10, 1, 7, 4);
-  } else {
+    draw_percent_symbol(1, 8, 4);
+    } else {
     draw_glyph(percent / 10, 1, 1, 6);
     draw_glyph(percent % 10, 1, 5, 6);
-    draw_glyph(10, 1, 9, 4);
+    draw_percent_symbol(1, 9, 4);
   }
 
   if (charging) {
@@ -340,6 +360,20 @@ void render(unsigned long now_ms) {
     // BATTERY UNAVAILABLE: neutral '--' dashes, never a fake percentage.
     paint_led3(8, 8, 8);
     draw_unavailable();
+
+  } else if (state == 9) {
+    // DOWNLOAD: real-time numeric percentage, then 100% -> checkmark on completion.
+    if (progress >= 100) {
+      paint_led3(0, 50, 0);
+      if (elapsed < 1800) {
+        draw_percentage(100, false, false, elapsed);
+      } else {
+        draw_completed_check();
+      }
+    } else {
+      paint_led3(0, 35, 55);
+      draw_percentage(progress, false, false, elapsed);
+    }
   }
 
   show_frame();

@@ -52,8 +52,9 @@ still-loading/
 │   ├── send_events.py        send a scenario or one probe
 │   ├── runner.py             local process capture and events
 │   ├── run_job.py            command line for one real Mac command
-│   ├── battery.py            pmset battery parser and deduplicating reporter
-│   ├── battery_monitor.py    CLI for MacBook battery updates and display mode
+│   ├── battery.py            pmset battery parser, deduplication, refresh, and backoff
+│   ├── battery_monitor.py    continuous CLI for MacBook battery updates and display mode
+│   ├── download_monitor.py   Chrome download progress detector and reporter
 │   ├── config.example.json   host, port, and token placeholders
 │   └── tests/
 ├── shared/
@@ -95,7 +96,7 @@ still-loading/
 | 3 | State engine plus the first LED 3 and matrix sketch | Mac tests done in this session. Verified on the board in Phase 4. |
 | 4 | Confirm Bridge on the real board and adjust the sketch only if a light test fails | Verified on real UNO Q hardware (HTTP `/v1/lights` -> App Lab `Bridge.call` -> LED 3 + 8×13 matrix). |
 | 4.1 | Watch one real Mac command and emit the existing job events | Verified on Mac and on real UNO Q hardware with `run_job.py --send`. |
-| 5 | Matrix and RGB polish, live `%` display, and MacBook battery indicator | Implemented and verified by 58 Mac tests. Ready for manual App Lab hardware check. |
+| 5 | Matrix and RGB polish, live `%` display, continuous MacBook battery indicator, and Chrome download monitor | Implemented and verified by 74 Mac tests. Ready for manual App Lab hardware check. |
 | 6 | Short log excerpts on failure, still without an AI explanation | Not started. Phase 4.1 records the exit code and keeps the captured text off the wire. |
 | 7 | Failure explanations. Rules first. A model only after a feasibility check. | Not started |
 | 8 | Demo script and a list of what was verified on the hardware | Not started |
@@ -147,6 +148,8 @@ still-loading/
   - Completed: 3 gentle heart beats, then `100` for 1.8 seconds, then settles into a calm steady checkmark.
   - Failed: steady `X` with corner markers and red LED 3, distinct from all waiting, slow, stall, and completion patterns.
 - Added `mac-agent/battery.py` and `mac-agent/battery_monitor.py` using `pmset -g batt` (`shell=False`, no root privileges) and authenticated `POST /v1/battery` + `POST /v1/display-mode`.
-- Active and failed jobs take priority by default (`auto` mode) and battery messages never enter `JobLog` or overwrite job state. Explicit `battery` mode uses state codes `6` (`battery`), `7` (`battery_charging`), and `8` (`battery_unavailable` showing `--`).
-- Documented the macOS lid-closed sleep limitation clearly in `README.md`.
-- On 25 October 2026, `python3 -m unittest discover -s mac-agent/tests -t mac-agent -v` reported 58 tests OK in 7.616 seconds.
+  - Reads battery immediately on start and polls continuously every 15 seconds by default (`--interval`), deduplicating unchanged readings while periodically refreshing every 5 minutes (`--refresh-interval 300`) so the board recovers after receiver restarts.
+  - Survives temporary receiver outages with exponential backoff (`15s -> 30s -> 60s`), never marks failed deliveries as sent, and sends the latest reading upon reconnection.
+- Active Chrome downloads (`download`, code `9`) and active or failed jobs take priority by default (`auto` mode), and battery messages never enter `JobLog` or overwrite job/download state. Explicit `battery` mode uses state codes `6` (`battery`), `7` (`battery_charging`), and `8` (`battery_unavailable` showing `--`).
+- Documented the macOS lid-closed sleep limitation and token rotation rules clearly in `README.md`.
+- On 25 October 2026, `python3 -m unittest discover -s mac-agent/tests -t mac-agent -v` reported 74 tests OK.

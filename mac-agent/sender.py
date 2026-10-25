@@ -181,6 +181,55 @@ def post_battery(base_url: str, token: str, battery_message: dict, timeout: floa
     }
 
 
+def post_download(base_url: str, token: str, download_message: dict, timeout: float = 2.0) -> dict:
+    """POST one browser download update to /v1/download."""
+    body = json.dumps(download_message).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/download",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {"reason": "bad_response", "detail": raw[:200]}
+        delivery = "unauthorized" if exc.code == 401 else "rejected"
+        return {
+            "delivery": delivery,
+            "delivered": False,
+            "http_status": exc.code,
+            "reason": str(payload.get("reason", "rejected")),
+            "detail": str(payload.get("detail", "")),
+        }
+    except urllib.error.URLError as exc:
+        return {
+            "delivery": "connection_error",
+            "delivered": False,
+            "http_status": None,
+            "reason": "connection_error",
+            "detail": str(exc.reason),
+        }
+
+    accepted = status == 202 and payload.get("status") == "accepted"
+    return {
+        "delivery": "accepted" if accepted else "rejected",
+        "delivered": accepted,
+        "http_status": status,
+        "reason": str(payload.get("status", "")),
+        "detail": "Receiver stored the download update" if accepted else str(payload),
+    }
+
+
 def post_display_mode(
     base_url: str,
     token: str,

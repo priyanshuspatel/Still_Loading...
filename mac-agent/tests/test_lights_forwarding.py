@@ -106,8 +106,16 @@ class ForwardTests(unittest.TestCase):
         self.assertEqual(body, {"status": "ok", "service": "still-loading"})
 
     def test_bad_payload_is_not_forwarded(self) -> None:
+        self.assertEqual(
+            bridge_args({"code": 9, "progress": 42, "state": "download", "progress_known": True}),
+            (9, 42, "download"),
+        )
+        self.assertEqual(
+            bridge_args({"code": 9, "progress": 0, "state": "download", "progress_known": False}),
+            (1, 0, "download"),
+        )
         with self.assertRaises(ValueError):
-            bridge_args({"code": 9, "progress": 0, "state": "running"})
+            bridge_args({"code": 10, "progress": 0, "state": "running"})
         with self.assertRaises(ValueError):
             bridge_args({"code": True, "progress": 0, "state": "running"})
 

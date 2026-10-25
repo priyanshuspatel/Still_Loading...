@@ -48,6 +48,8 @@ class LightPublisher:
         except ImportError:
             return
         try:
-            Bridge.call("set_job_lights", view.code, int(view.progress))
+            code = 1 if (view.state == "download" and not view.progress_known) else view.code
+            prog = 0 if (view.state == "download" and not view.progress_known) else int(view.progress)
+            Bridge.call("set_job_lights", code, prog)
         except Exception as exc:  # noqa: BLE001 - the light call must not stop HTTP
             print(f"lights call skipped ({exc.__class__.__name__})", flush=True)

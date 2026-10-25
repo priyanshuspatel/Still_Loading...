@@ -28,6 +28,7 @@ COMPLETE_HEART_PERIOD_MS = 750
 COMPLETE_HEART_ON_MS = 450
 COMPLETE_HEART_TOTAL_MS = COMPLETE_HEART_BLINKS * COMPLETE_HEART_PERIOD_MS
 COMPLETE_PERCENT_MS = COMPLETE_HEART_TOTAL_MS + 1800
+DOWNLOAD_COMPLETE_PERCENT_MS = 1800
 
 # 3x5 pixel glyphs rendered on rows 1..5.
 DIGIT_GLYPHS: dict[str, tuple[str, str, str, str, str]] = {
@@ -41,7 +42,7 @@ DIGIT_GLYPHS: dict[str, tuple[str, str, str, str, str]] = {
     "7": ("111", "001", "001", "001", "001"),
     "8": ("111", "101", "111", "101", "111"),
     "9": ("111", "101", "111", "001", "111"),
-    "%": ("101", "001", "010", "100", "101"),
+    "%": ("110", "001", "010", "100", "011"),
 }
 
 # 7x6 heart centered at columns 3..9, rows 1..6.
@@ -84,6 +85,26 @@ def _draw_glyph(frame: list[list[int]], glyph: str, top_row: int, left_col: int,
         for c_idx, char in enumerate(line):
             if char == "1":
                 set_pixel(frame, top_row + r_idx, left_col + c_idx, brightness)
+
+
+def _draw_percent_symbol(frame: list[list[int]], top_row: int, left_col: int, brightness: int) -> None:
+    """Draw the 4x5 '%' symbol mirrored in uno-q/sketch/sketch.ino."""
+    # Upper dot
+    set_pixel(frame, top_row, left_col, brightness)
+    set_pixel(frame, top_row, left_col + 1, brightness)
+    set_pixel(frame, top_row + 1, left_col, brightness)
+
+    # Straight diagonal slash, from upper right to lower left
+    set_pixel(frame, top_row, left_col + 3, brightness)
+    set_pixel(frame, top_row + 1, left_col + 2, brightness)
+    set_pixel(frame, top_row + 2, left_col + 1, brightness)
+    set_pixel(frame, top_row + 3, left_col, brightness)
+
+    # Lower dot
+    set_pixel(frame, top_row + 3, left_col + 2, brightness)
+    set_pixel(frame, top_row + 3, left_col + 3, brightness)
+    set_pixel(frame, top_row + 4, left_col + 2, brightness)
+    set_pixel(frame, top_row + 4, left_col + 3, brightness)
 
 
 def render_heart_frame(brightness: int = 5, progress: int | None = None) -> list[list[int]]:
@@ -148,20 +169,16 @@ def render_percentage_frame(
 
     frame = empty_frame()
     if percent == 100:
-        glyphs = ["1", "0", "0"]
-        start_col = 1
+        _draw_glyph(frame, "1", top_row=1, left_col=1, brightness=6)
+        _draw_glyph(frame, "0", top_row=1, left_col=5, brightness=6)
+        _draw_glyph(frame, "0", top_row=1, left_col=9, brightness=6)
     elif percent < 10:
-        glyphs = [str(percent), "%"]
-        start_col = 3
+        _draw_glyph(frame, str(percent), top_row=1, left_col=3, brightness=6)
+        _draw_percent_symbol(frame, top_row=1, left_col=8, brightness=4)
     else:
-        glyphs = [str(percent // 10), str(percent % 10), "%"]
-        start_col = 1
-
-    col = start_col
-    for glyph in glyphs:
-        kind_brightness = 4 if glyph == "%" else 6
-        _draw_glyph(frame, glyph, top_row=1, left_col=col, brightness=kind_brightness)
-        col += 4
+        _draw_glyph(frame, str(percent // 10), top_row=1, left_col=1, brightness=6)
+        _draw_glyph(frame, str(percent % 10), top_row=1, left_col=5, brightness=6)
+        _draw_percent_symbol(frame, top_row=1, left_col=9, brightness=4)
 
     if percent == 100:
         for c in range(COLS):
@@ -241,7 +258,7 @@ def select_display_frame(
     job state), running and slow states never display a fabricated percentage.
     """
     if progress_known is None:
-        known = progress > 0 or state in {"completed", "battery", "battery_charging"}
+        known = progress > 0 or state in {"completed", "battery", "battery_charging", "download"}
     else:
         known = bool(progress_known)
 
@@ -313,5 +330,15 @@ def select_display_frame(
 
     if state == "battery_unavailable":
         return ("battery_unavailable", render_unavailable_frame())
+
+    if state == "download":
+        if not known:
+            dot = (ms // DOT_STEP_MS) % 3
+            return ("download_waiting", render_waiting_dots_frame(dot, progress=None))
+        if progress >= 100:
+            if ms < DOWNLOAD_COMPLETE_PERCENT_MS:
+                return ("download_100", render_percentage_frame(100))
+            return ("download_check", render_completed_check_frame())
+        return ("download_percent", render_percentage_frame(progress))
 
     raise ValueError(f"Unknown display state: {state!r}")

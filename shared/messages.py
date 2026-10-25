@@ -49,6 +49,22 @@ BATTERY_REQUIRED_FIELDS = (
 )
 BATTERY_OPTIONAL_FIELDS = frozenset({"display_mode", "return_to_battery"})
 
+DOWNLOAD_STATES = frozenset(
+    {"idle", "starting", "downloading", "completed", "failed", "cancelled"}
+)
+DOWNLOAD_REQUIRED_FIELDS = (
+    "schema_version",
+    "kind",
+    "download_id",
+    "state",
+    "downloaded_bytes",
+    "total_bytes",
+    "progress",
+    "progress_known",
+    "timestamp",
+)
+DOWNLOAD_OPTIONAL_FIELDS = frozenset({"filename"})
+
 
 class ProtocolError(Exception):
     """A message or request the receiver can answer with an HTTP status."""
@@ -282,6 +298,89 @@ def validate_display_mode_message(message: dict) -> dict:
         _reject("invalid_field", "display_mode must be auto, job, or battery")
     if "return_to_battery" in message:
         _require_bool(message["return_to_battery"], "return_to_battery")
+    return message
+
+
+def validate_download_message(message: dict) -> dict:
+    """Validate a Mac browser download status payload for POST /v1/download.
+
+    Download messages are separate from job events and never enter JobLog.
+    """
+    if not isinstance(message, dict):
+        _reject("not_an_object", "Download message must be a JSON object")
+
+    missing = [field for field in DOWNLOAD_REQUIRED_FIELDS if field not in message]
+    if missing:
+        _reject("missing_field", "Download message is missing " + ", ".join(missing))
+
+    allowed = set(DOWNLOAD_REQUIRED_FIELDS) | DOWNLOAD_OPTIONAL_FIELDS
+    unknown = sorted(set(message) - allowed)
+    if unknown:
+        _reject(
+            "unknown_field",
+            "Download message has unknown fields: " + ", ".join(unknown),
+        )
+
+    if message["schema_version"] != SCHEMA_VERSION:
+        _reject("bad_schema_version", "schema_version must be 1")
+
+    if message["kind"] != "download":
+        _reject("invalid_field", "kind must be 'download'")
+
+    state = message["state"]
+    if not isinstance(state, str) or state not in DOWNLOAD_STATES:
+        _reject(
+            "invalid_field",
+            "state must be idle, starting, downloading, completed, failed, or cancelled",
+        )
+
+    download_id = message["download_id"]
+    if state == "idle":
+        if download_id is not None and (
+            not isinstance(download_id, str) or not download_id or len(download_id) > 128
+        ):
+            _reject("invalid_field", "download_id must be None or a 1-128 char string when idle")
+    else:
+        if not isinstance(download_id, str) or not download_id.strip() or len(download_id) > 128:
+            _reject("invalid_field", "download_id must be a non-empty string up to 128 chars")
+
+    downloaded_bytes = _require_int(message["downloaded_bytes"], "downloaded_bytes")
+    if downloaded_bytes < 0:
+        _reject("invalid_field", "downloaded_bytes must be 0 or greater")
+
+    total_bytes = message["total_bytes"]
+    if total_bytes is not None:
+        total_bytes = _require_int(total_bytes, "total_bytes")
+        if total_bytes < 0:
+            _reject("invalid_field", "total_bytes must be 0 or greater when present")
+
+    progress = _require_int(message["progress"], "progress")
+    if not 0 <= progress <= 100:
+        _reject("invalid_field", "progress must be from 0 to 100")
+
+    _require_bool(message["progress_known"], "progress_known")
+    progress_known = message["progress_known"]
+
+    if state == "completed":
+        if progress != 100 or not progress_known:
+            _reject("invalid_field", "completed download must report progress=100 and progress_known=true")
+    elif not progress_known and progress != 0:
+        _reject("invalid_field", "unknown download total must report progress=0")
+
+    timestamp = message["timestamp"]
+    if (
+        not isinstance(timestamp, str)
+        or len(timestamp) != 24
+        or timestamp[10] != "T"
+        or not timestamp.endswith("Z")
+    ):
+        _reject("invalid_field", "timestamp must look like 2026-01-01T00:00:00.000Z")
+
+    if "filename" in message and message["filename"] is not None:
+        filename = message["filename"]
+        if not isinstance(filename, str) or not filename.strip() or len(filename) > 255:
+            _reject("invalid_field", "filename must be a 1-255 character string when present")
+
     return message
 
 

@@ -21,6 +21,7 @@ from messages import (
     token_is_long_enough,
     validate_battery_message,
     validate_display_mode_message,
+    validate_download_message,
 )
 
 HEALTH_BODY = {"status": "ok", "service": "still-loading"}
@@ -71,6 +72,32 @@ def _battery_body(engine) -> dict:
         "percent": battery.percent,
         "charging_state": battery.charging_state,
         "timestamp": battery.timestamp,
+        "display_mode": engine.display_mode,
+    }
+
+
+def _download_body(engine) -> dict:
+    if engine is None or engine.download_view is None:
+        return {
+            "active": False,
+            "download_id": None,
+            "state": "idle",
+            "progress": 0,
+            "progress_known": False,
+            "downloaded_bytes": 0,
+            "total_bytes": None,
+            "display_mode": "auto" if engine is None else engine.display_mode,
+        }
+    dl = engine.download_view
+    return {
+        "active": dl.state in {"starting", "downloading", "completed", "failed"},
+        "download_id": dl.download_id,
+        "state": dl.state,
+        "progress": dl.progress,
+        "progress_known": dl.progress_known,
+        "downloaded_bytes": dl.downloaded_bytes,
+        "total_bytes": dl.total_bytes,
+        "timestamp": dl.timestamp,
         "display_mode": engine.display_mode,
     }
 
@@ -141,6 +168,11 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 if not self._authorized():
                     return
                 self._send(200, _battery_body(engine))
+                return
+            if path == "/v1/download":
+                if not self._authorized():
+                    return
+                self._send(200, _download_body(engine))
                 return
             prefix = "/v1/jobs/"
             if path.startswith(prefix):
@@ -228,13 +260,13 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
             path = self.path.split("?", 1)[0]
-            if path not in {"/v1/events", "/v1/battery", "/v1/display-mode"}:
+            if path not in {"/v1/events", "/v1/battery", "/v1/display-mode", "/v1/download"}:
                 self._send(
                     404,
                     {
                         "status": "not_found",
                         "reason": "unknown_path",
-                        "detail": "POST messages to /v1/events, /v1/battery, or /v1/display-mode",
+                        "detail": "POST messages to /v1/events, /v1/battery, /v1/download, or /v1/display-mode",
                     },
                 )
                 return
@@ -242,6 +274,41 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 return
             message = self._read_json_body()
             if message is None:
+                return
+
+            if path == "/v1/download":
+                try:
+                    checked = validate_download_message(message)
+                    if engine is not None:
+                        engine.apply_download(checked, time.monotonic())
+                except ProtocolError as exc:
+                    self._send(
+                        exc.status,
+                        {"status": "rejected", "reason": exc.reason, "detail": exc.detail},
+                    )
+                    return
+                if announce:
+                    pct_label = (
+                        f"{checked['progress']}%"
+                        if checked["progress_known"]
+                        else "indeterminate"
+                    )
+                    print(
+                        f"accepted download {checked['state']} ({pct_label})",
+                        flush=True,
+                    )
+                self._send(
+                    202,
+                    {
+                        "status": "accepted",
+                        "kind": "download",
+                        "download_id": checked["download_id"],
+                        "state": checked["state"],
+                        "progress": checked["progress"],
+                        "progress_known": checked["progress_known"],
+                        "display_mode": "auto" if engine is None else engine.display_mode,
+                    },
+                )
                 return
 
             if path == "/v1/battery":
