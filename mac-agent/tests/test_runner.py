@@ -68,7 +68,7 @@ class ProcessRunnerTests(unittest.TestCase):
             [
                 PYTHON,
                 "-c",
-                "import sys; sys.stderr.write('secret-log\\n'); raise SystemExit(3)",
+                "import sys; sys.stderr.write('TOKEN=secret-log\\n'); raise SystemExit(3)",
             ],
             heartbeat_interval=2,
             job_id="failjob1",
@@ -80,6 +80,22 @@ class ProcessRunnerTests(unittest.TestCase):
         self.assertTrue(failed["is_failure"])
         self.assertEqual(failed["exit_code"], 3)
         self.assertNotIn("secret-log", json.dumps(failed))
+        self.assertIn("[REDACTED]", json.dumps(failed))
+        validate_message(failed)
+
+    def test_nonzero_exit_without_excerpt(self) -> None:
+        record = run_process(
+            [
+                PYTHON,
+                "-c",
+                "import sys; sys.stderr.write('plain error\\n'); raise SystemExit(3)",
+            ],
+            heartbeat_interval=2,
+            job_id="failjob2",
+            include_excerpt=False,
+        )
+        failed = record.events[-1]
+        self.assertNotIn("excerpt", failed)
         validate_message(failed)
 
     def test_exit_zero_with_stderr_is_still_completed(self) -> None:

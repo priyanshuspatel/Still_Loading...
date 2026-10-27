@@ -54,6 +54,45 @@ export interface LightsReading {
   charging_state: string | null;
 }
 
+export interface GemmaEvidenceItem {
+  log_line: string;
+  reason: string;
+  found?: boolean;
+}
+
+export type GemmaVerificationStatus =
+  | 'verified'
+  | 'unverified'
+  | 'unavailable'
+  | 'timeout'
+  | 'malformed';
+
+export interface FailureExplanation {
+  category: string;
+  summary: string;
+  suggestion: string;
+  confidence?: number;
+  source?: string;
+  severity?: 'info' | 'warning' | 'error' | 'critical' | string;
+  verification_status?: GemmaVerificationStatus | string;
+  diagnosis?: string;
+  recommended_action?: string;
+  evidence?: GemmaEvidenceItem[];
+  fallback_summary?: string;
+  detail?: string;
+}
+
+export interface JobReading {
+  job_id: string;
+  event?: string;
+  progress: number;
+  exit_code?: number | null;
+  is_failure: boolean;
+  message?: string;
+  excerpt?: string | null;
+  explanation?: FailureExplanation | null;
+}
+
 export interface ConnectionHealth {
   dataService: 'online' | 'degraded' | 'offline';
   macAgent: 'active' | 'stale' | 'offline' | 'not_verified';
@@ -70,6 +109,7 @@ export interface TelemetrySnapshot {
   battery: BatteryReading;
   download: DownloadReading;
   lights: LightsReading;
+  job?: JobReading | null;
   connection: ConnectionHealth;
   is_stale: boolean;
   last_updated_text: string;
@@ -85,3 +125,34 @@ export interface ActivityEvent {
   severity: 'info' | 'success' | 'warning' | 'error' | 'neutral';
   is_demo?: boolean;
 }
+
+export interface JobHistoryRecord {
+  job_id: string;
+  event: string;
+  start_time: number;
+  end_time: number;
+  duration_seconds: number;
+  progress: number;
+  exit_code: number | null;
+  is_failure: boolean;
+  message?: string | null;
+  category?: string | null;
+  summary?: string | null;
+  suggestion?: string | null;
+  excerpt?: string | null;
+  explanation?: FailureExplanation | null;
+  accepted_count: number;
+  highest_sequence: number;
+  created_at: string;
+}
+
+export interface HistoryStats {
+  total_jobs: number;
+  completed_count: number;
+  failed_count: number;
+  success_rate: number;
+  avg_duration_seconds: number;
+  total_duration_seconds: number;
+  failure_categories: Record<string, number>;
+}
+

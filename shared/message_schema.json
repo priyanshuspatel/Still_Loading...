@@ -27,7 +27,7 @@
     "is_failure"
   ],
   "event_fields": {
-    "failed": ["message", "exit_code"],
+    "failed": ["message", "exit_code", "excerpt", "explanation"],
     "completed": ["exit_code"]
   },
   "optional_fields": ["mode", "source"],

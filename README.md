@@ -8,18 +8,47 @@ The folder on disk is `still-loading`.
 
 ## Current status
 
-**Phase 5 polishes the 8×13 matrix animations, adds continuous MacBook battery monitoring, and supports real-time Chrome download percentages.** Phases 1 through 4.1 are implemented, and you confirmed on real hardware that a live Mac process (`run_job.py`) sent `started`, `heartbeat`, `progress`, and `completed` events to the UNO Q and drove LED 3 and the 8×13 matrix. Phase 5 and download/battery monitoring are covered by **74 automated Mac tests**; the updated sketch and continuous monitors are ready for your manual hardware check in App Lab.
+**Phases 1 through 16 are fully implemented.** Physical hardware verification is documented in [HARDWARE_VERIFICATION.md](file:///Users/priyanshuswapneshpatel/still-loading/HARDWARE_VERIFICATION.md), and the repository is covered by **172 automated Mac tests**, **2 relay tests**, and **4 web matrix tests** (178 total tests).
 
 | Piece | Status |
 | --- | --- |
 | Local job simulator | Working. |
 | HTTP delivery and token check | Working. Verified against `192.168.1.5:8090`. |
 | State engine | Implemented and covered by Mac tests. |
-| LED 3 and the 8×13 matrix | Phase 4 verified on hardware. Phase 5 adds heartbeats, waiting dots, numeric `%`, battery mode, and download mode (ready for App Lab upload). |
+| LED 3 and the 8×13 matrix | Phase 4 verified on hardware. Phase 5 adds heartbeats, waiting dots, numeric `%`, battery mode, and download mode. |
 | Real command-line jobs | Phase 4.1 verified on hardware (`run_job.py`). |
-| MacBook battery indicator | Continuous polling (`battery_monitor.py`, 15s default, backoff + 5m refresh). Covered by Mac tests; ready for hardware check. |
-| Chrome download monitor | Real-time percentage (`download_monitor.py`). Covered by Mac tests; ready for hardware check. |
-| AI error explanations | Not built. |
+| MacBook battery indicator | Continuous polling (`battery_monitor.py`, 15s default, backoff + 5m refresh). Covered by Mac tests. |
+| Chrome download monitor | Real-time percentage (`download_monitor.py`). Covered by Mac tests. |
+| Safe failure log excerpts | Phase 6 working: extracts trailing error lines (max 512 chars) with secret redaction. |
+| Failure explanations | Phase 7 working: zero-overhead rules-first explainer + hardware model feasibility benchmark. |
+| Full demo & verification | Phase 8 working: unified demo script (`demo.py`) and [HARDWARE_VERIFICATION.md](file:///Users/priyanshuswapneshpatel/still-loading/HARDWARE_VERIFICATION.md). |
+| Failure intelligence web dashboard | Phase 9 working: surfaces root cause diagnosis, suggested fixes with 1-click copy, and redacted excerpts. |
+| Daemons & operational tooling | Phase 10 working: systemd receiver service, macOS launchd agents, sync script, and diagnostic hardware verifier. |
+| Live ANSI terminal monitor | Phase 11 working: zero-dependency terminal companion (`terminal_monitor.py`) with live 8×13 matrix twin. |
+| Unified test runner & CI/CD | Phase 12 working: single-command test runner (`scripts/test_all.sh`) and GitHub Actions CI workflow. |
+| Persistent History & Analytics Store | Phase 13 working: SQLite store (`history_store.py`) tracking runs, duration, and stats across receiver restarts. |
+| Job History UI & CLI Viewer | Phase 14 working: web component (`JobHistory.tsx`) and CLI (`history_cli.py`) with metrics, filtering, and fix copy. |
+| Ambient Audio Cues | Phase 15 working: macOS system sounds (`audio.py`, `--bell`) & Web Audio synthesizer (`audioCues.ts`). |
+| Native macOS Notifications | Phase 16 working: Notification Center alerts (`notifications.py`, `--notify`). |
+
+## Run the full demonstration
+
+To test and visualize all scenarios (Normal, Slow, Hang, Fail, Real Process Crash with Explanation, and MacBook Battery) in under 3 seconds:
+
+```bash
+cd ~/still-loading/mac-agent
+python3 demo.py --all --fast
+```
+
+To run in real time:
+```bash
+python3 demo.py --all --live
+```
+
+To forward the entire demo to your live UNO Q hardware:
+```bash
+python3 demo.py --all --send --config config.local.json
+```
 
 ## Run the simulator
 
@@ -53,7 +82,16 @@ python3 run_job.py -- python3 -c "import time; print('working 40%'); time.sleep(
 
 Stdout shows JSON events: `started`, a `heartbeat` about every 2 seconds, `progress` when a line contains a percent, then `completed` or `failed`. A quiet command that prints nothing still ends as `completed` when its exit code is 0. Exit code 0 is `completed`. Any other exit code is `failed`.
 
-The command's own stdout and stderr are captured separately and are not copied into the JSON. The last stderr line of `run_job.py` itself shows the process id, elapsed time, exit code, and how many bytes were captured.
+When a command fails (exit code != 0), a safe trailing excerpt from stderr (falling back to stdout, capped at 10 lines and 512 characters) is sanitized and attached to the `failed` event as `"excerpt"`. Bearer tokens, Authorization headers, and sensitive key/password assignments are automatically redacted with `[REDACTED]`. Use `--no-excerpt` if you want to omit the log excerpt entirely.
+
+Add `--gemma` to ask a local or remote Gemma endpoint to explain that excerpt. The rules explainer still runs if Gemma is off, slow, or returns a citation that is not in the log. Gemma runs on the Mac. The UNO Q keeps its existing light codes. See `GEMMA.md`.
+
+```bash
+GEMMA_ENABLED=1 GEMMA_BASE_URL=http://127.0.0.1:11434/v1 GEMMA_MODEL=gemma2:2b \
+  python3 run_job.py --gemma -- python3 -c "import non_existent_pkg_xyz"
+```
+
+The command's full stdout and stderr stay on the Mac and are not copied into the JSON. The last stderr line of `run_job.py` itself shows the process id, elapsed time, exit code, and how many bytes were captured.
 
 To send that same run to a receiver you already started, add `--send`. This uses the existing token and does not print it:
 
@@ -69,7 +107,7 @@ Required on every message: `schema_version`, `event`, `job_id`, `sequence`, `tim
 
 Wire events: `started`, `heartbeat`, `progress`, `failed`, `completed`.
 
-`failed` also needs `message` and a non-zero `exit_code`. `completed` needs `progress` 100 and `exit_code` 0.
+`failed` also needs `message` and a non-zero `exit_code`, and can include an optional sanitized `excerpt` string (max 512 characters). `completed` needs `progress` 100 and `exit_code` 0. Neither `completed` nor intermediate events take an `excerpt` or `message`.
 
 The receiver keeps the highest sequence for each job id.
 
@@ -312,6 +350,136 @@ python3 send_events.py --mode fail --fast --config config.local.json
 
 The board should end on `lights failed`. LED 3 should be red and the matrix should show an X, once the sketch is running.
 
-## What is next
+## Web Dashboard & Failure Intelligence (Phase 9)
 
-Phase 4 and Phase 4.1 are verified on the physical UNO Q. Phase 5 adds the heart/waiting/percentage animations and MacBook battery mode (verified by 58 Mac tests; upload the updated `uno-q/sketch/sketch.ino` and `uno-q/app_lab_main.py` in App Lab to verify on hardware). Short log excerpts and local failure explanations stay for Phases 6 and 7.
+A responsive, high-performance web dashboard is available in `web/` and deployed at [stillloading.tech](https://stillloading.tech):
+- **Live Failure Intelligence Card:** When a job fails, the dashboard surfaces a root cause diagnosis, suggested command resolution with a 1-click clipboard copy button, and a sanitized terminal excerpt (`max 10 lines / 512B`) with secrets redacted.
+- **Physical Matrix Twin (8×13):** A pixel-perfect canvas twin mirroring the STM32U585 LED matrix firmware with interactive state audition (Normal, Slow, Hang, Fail, Completed, Battery Charging, Battery Discharging, Battery Unavailable, and Chrome Downloads).
+- **Chrome Download & Battery Monitors:** Real-time transfer rates, percentage gauges, and time remaining.
+
+### Running the Web Dashboard Locally
+```bash
+cd ~/still-loading/web
+npm install
+npm test          # Runs matrixEngine.test.ts (4/4 tests pass)
+npm run dev       # Starts local Vite development server
+```
+
+---
+
+## Operational Tooling & Background Daemons (Phase 10)
+
+### 1. Board Synchronization (`scripts/sync_to_board.sh`)
+Quickly sync `shared/` and `uno-q/` to the Arduino UNO Q over SSH/rsync without copying local credentials or `.DS_Store` files:
+
+```bash
+# Sync to default board IP (192.168.1.5)
+./scripts/sync_to_board.sh
+
+# Sync to a custom IP and restart the systemd receiver service:
+./scripts/sync_to_board.sh 192.168.1.10 --restart
+```
+
+### 2. Pre-Flight Diagnostic Verifier (`scripts/verify_hardware.sh`)
+Runs a comprehensive pre-flight check covering local macOS battery sensors, telemetry relay reachability, board connectivity (`port 8090`), authenticated `/v1/lights`, and the full unit test suite:
+
+```bash
+./scripts/verify_hardware.sh [BOARD_IP] [TOKEN]
+```
+
+### 3. Persistent UNO Q Receiver Daemon (`systemd`)
+To start the receiver automatically on the Qualcomm QRB2210 Linux OS at boot:
+
+```bash
+# From the board (ssh arduino@192.168.1.5)
+sudo cp ~/still-loading/uno-q/still-loading-receiver.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now still-loading-receiver.service
+
+# Check status and logs:
+sudo systemctl status still-loading-receiver.service
+journalctl -u still-loading-receiver.service -f
+```
+
+### 4. Background macOS Agents (`launchd`)
+To run battery monitoring and telemetry relay in the background on your Mac without keeping terminal windows open, use the Property List templates in `mac-agent/launchd/`:
+- `mac-agent/launchd/com.stillloading.battery.plist` (polls `pmset -g batt` every 15s)
+- `mac-agent/launchd/com.stillloading.relay.plist` (serves the web dashboard on `127.0.0.1:8765`)
+
+See [`mac-agent/launchd/README.md`](file:///Users/priyanshuswapneshpatel/still-loading/mac-agent/launchd/README.md) for full click-by-click installation instructions.
+
+---
+
+## Live Terminal Monitor & Matrix Twin (Phase 11)
+
+For developers who prefer staying in their terminal, `mac-agent/terminal_monitor.py` provides a zero-dependency ANSI dashboard:
+- **ASCII 8×13 Matrix Twin:** Visualizes the UNO Q matrix with 8 levels of grayscale shading in real-time.
+- **Side-by-side Telemetry:** Displays state badge, active job progress bar, MacBook battery percentage with charging glyph, and Chrome download speed.
+- **Failure Intelligence Alert:** Instantly displays root cause diagnosis and suggested fix if a job fails.
+
+```bash
+# Run in interactive state demo/audition mode:
+python3 mac-agent/terminal_monitor.py --demo
+
+# Connect to a live local telemetry relay:
+python3 mac-agent/terminal_monitor.py --relay http://127.0.0.1:8765
+
+# Connect directly to the UNO Q board:
+python3 mac-agent/terminal_monitor.py --board http://192.168.1.5:8090 --token $STILL_LOADING_TOKEN
+```
+
+---
+
+## Unified Test Runner & CI/CD (Phase 12)
+
+### Run All Monorepo Tests Locally
+Execute the complete test suite across Python, Relay, and Web with one command:
+
+```bash
+./scripts/test_all.sh
+```
+
+This verifies:
+1. **146 Mac Agent & Shared Protocol tests** (`unittest discover`)
+2. **2 Telemetry Relay tests** (`relay/tests/test_relay.py`)
+3. **Headless multi-scenario Demo Suite** (`demo.py --all --fast`)
+4. **4 Web Matrix Engine tests** (`npm test` in `web/`)
+5. **Vite Production Bundle Build** (`npm run build` in `web/`)
+
+### Automated GitHub Actions CI
+The workflow in [`.github/workflows/ci.yml`](file:///Users/priyanshuswapneshpatel/still-loading/.github/workflows/ci.yml) automatically runs on push and pull request across:
+- **Operating Systems:** `ubuntu-latest`, `macos-latest`
+- **Python Versions:** 3.11, 3.12, 3.13
+- **Node.js:** 20 (with npm caching)
+
+---
+
+## Job History & Analytics (Phases 13 & 14)
+
+### 1. Terminal History Query (`mac-agent/history_cli.py`)
+Query recorded build and test sessions without starting a browser:
+
+```bash
+# List recent jobs (status, duration, exit code, timestamp):
+python3 mac-agent/history_cli.py
+
+# Show overall metrics (success rate, average run time, top failure categories):
+python3 mac-agent/history_cli.py --stats
+
+# Show failed jobs only with diagnosis and 1-click suggested fix:
+python3 mac-agent/history_cli.py --failed
+
+# Query history from a live UNO Q receiver over HTTP:
+python3 mac-agent/history_cli.py --board http://192.168.1.5:8090 --token $STILL_LOADING_TOKEN
+```
+
+### 2. Web Analytics & Session Log (`JobHistory.tsx`)
+On the web dashboard's **Live Dashboard** tab:
+- **KPI Summary Grid:** Real-time visibility into Total Monitored Runs, Overall Success Rate (%), Average Duration (seconds), and Top Root Cause.
+- **Interactive Execution Log:** Filter between all jobs and failed-only runs.
+- **Expandable Failure Details:** Click any failed job to view root cause diagnosis, suggested command resolution with a 1-click **Copy** button, and sanitized terminal output excerpts.
+- **Receiver Endpoints:**
+  - `GET /v1/history?limit=50&offset=0&failed_only=1`
+  - `GET /v1/history/stats`
+
+

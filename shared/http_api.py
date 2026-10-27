@@ -12,7 +12,14 @@ import json
 import secrets
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+try:
+    from history_store import HistoryStore, get_history_store
+except ImportError:
+    HistoryStore = None  # type: ignore
+    get_history_store = lambda: None  # type: ignore
 
 from messages import (
     JobLog,
@@ -106,8 +113,19 @@ def _json_bytes(payload: dict) -> bytes:
     return json.dumps(payload).encode("utf-8")
 
 
-def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=None):
-    """Build a request handler closed over one job log and one token."""
+def make_handler(
+    job_log: JobLog,
+    token: str,
+    announce: bool = False,
+    engine=None,
+    history_store: HistoryStore | None = None,
+):
+    """Build a request handler closed over one job log, token, and optional history store."""
+    if history_store is None and get_history_store is not None:
+        try:
+            history_store = get_history_store()
+        except Exception:
+            history_store = None
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "StillLoading/1"
@@ -173,6 +191,29 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 if not self._authorized():
                     return
                 self._send(200, _download_body(engine))
+                return
+            if path == "/v1/history":
+                if not self._authorized():
+                    return
+                if history_store is None:
+                    self._send(503, {"status": "error", "reason": "history_unavailable", "detail": "History store is not initialized"})
+                    return
+                query_str = self.path.split("?", 1)[1] if "?" in self.path else ""
+                qparams = urllib.parse.parse_qs(query_str)
+                limit = int(qparams.get("limit", [50])[0])
+                offset = int(qparams.get("offset", [0])[0])
+                failed_only = qparams.get("failed_only", ["0"])[0] in ("1", "true")
+                jobs = history_store.list_jobs(limit=limit, offset=offset, failed_only=failed_only)
+                self._send(200, {"status": "ok", "jobs": jobs, "count": len(jobs)})
+                return
+            if path == "/v1/history/stats":
+                if not self._authorized():
+                    return
+                if history_store is None:
+                    self._send(503, {"status": "error", "reason": "history_unavailable", "detail": "History store is not initialized"})
+                    return
+                stats = history_store.get_stats()
+                self._send(200, {"status": "ok", "stats": stats})
                 return
             prefix = "/v1/jobs/"
             if path.startswith(prefix):
@@ -375,6 +416,13 @@ def make_handler(job_log: JobLog, token: str, announce: bool = False, engine=Non
                 return
             if engine is not None:
                 engine.apply(stored, time.monotonic())
+            if stored.get("event") in {"completed", "failed"} and history_store is not None:
+                try:
+                    snapshot = job_log.snapshot(stored["job_id"])
+                    if snapshot:
+                        history_store.record_job(job_log.events(stored["job_id"]), snapshot)
+                except Exception:
+                    pass
             if announce:
                 print(
                     f"accepted job {stored['job_id']} "
@@ -440,9 +488,10 @@ def build_server(
     job_log: JobLog | None = None,
     announce: bool = False,
     engine=None,
+    history_store: HistoryStore | None = None,
 ) -> tuple[StillLoadingServer, JobLog]:
     if job_log is None:
         job_log = JobLog()
-    handler = make_handler(job_log, token, announce=announce, engine=engine)
+    handler = make_handler(job_log, token, announce=announce, engine=engine, history_store=history_store)
     httpd = StillLoadingServer((host, port), handler)
     return httpd, job_log

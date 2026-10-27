@@ -1,0 +1,294 @@
+{
+  "description": "Real failure logs for Gemma evidence checks. Each process case is the original stderr or stdout of a command run on this machine, then passed through the project redactor. The local history database had failed jobs but empty excerpts, so those rows are recorded only as a note and are not used as log evidence.",
+  "history_rows_without_excerpts": [
+    {
+      "id": "history_build-1",
+      "message": "Process exited with code 1"
+    },
+    {
+      "id": "history_fail-job",
+      "message": "Simulated build error"
+    }
+  ],
+  "case_count": 20,
+  "cases": [
+    {
+      "id": "python_missing_module",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "import non_existent_pkg_xyz"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import non_existent_pkg_xyz\nModuleNotFoundError: No module named 'non_existent_pkg_xyz'",
+      "expected_category": "missing_dependency",
+      "expected_summary": "Missing Python module: 'non_existent_pkg_xyz'",
+      "expected_suggestion": "Install it with 'pip install non_existent_pkg_xyz' or add 'non_existent_pkg_xyz' to your project dependencies."
+    },
+    {
+      "id": "python_syntax_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "broken_syntax.py"
+      ],
+      "exit_code": 1,
+      "log": "File \"/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/broken_syntax.py\", line 1\n    def broken(\n              ^\nSyntaxError: '(' was never closed",
+      "expected_category": "syntax_error",
+      "expected_summary": "Python syntax error: '(' was never closed",
+      "expected_suggestion": "Review the file and line indicated in the traceback for syntax mistakes or unclosed brackets."
+    },
+    {
+      "id": "python_indentation_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "broken_indent.py"
+      ],
+      "exit_code": 1,
+      "log": "File \"/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/broken_indent.py\", line 2\n    return 1\n    ^^^^^^\nIndentationError: expected an indented block after function definition on line 1",
+      "expected_category": "syntax_error",
+      "expected_summary": "Python syntax error: expected an indented block after function definition on line 1",
+      "expected_suggestion": "Review the file and line indicated in the traceback for syntax mistakes or unclosed brackets."
+    },
+    {
+      "id": "python_file_not_found",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "does-not-exist.txt')"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    open('/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/does-not-exist.txt')\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/does-not-exist.txt'",
+      "expected_category": "file_not_found",
+      "expected_summary": "File or directory not found: '/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/does-not-exist.txt'",
+      "expected_suggestion": "Verify that '/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/does-not-exist.txt' exists and that the working directory is correct."
+    },
+    {
+      "id": "python_permission_denied",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "locked.txt')"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    open('/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/locked.txt')\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: '/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/locked.txt'",
+      "expected_category": "permission_denied",
+      "expected_summary": "Permission denied: /var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/locked.txt",
+      "expected_suggestion": "Verify read/write permissions or run with the required user privileges."
+    },
+    {
+      "id": "python_zero_division",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "print(1/0)"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    print(1/0)\n          ~^~\nZeroDivisionError: division by zero",
+      "expected_category": "runtime_error",
+      "expected_summary": "Division by zero error",
+      "expected_suggestion": "Check denominator values and add guards against zero before dividing."
+    },
+    {
+      "id": "python_type_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "len(None)"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    len(None)\n    ~~~^^^^^^\nTypeError: object of type 'NoneType' has no len()",
+      "expected_category": "runtime_error",
+      "expected_summary": "TypeError: object of type 'NoneType' has no len()",
+      "expected_suggestion": "Inspect function arguments and variable types leading up to the failure."
+    },
+    {
+      "id": "python_value_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "int('not-a-number')"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    int('not-a-number')\n    ~~~^^^^^^^^^^^^^^^^\nValueError: invalid literal for int() with base 10: 'not-a-number'",
+      "expected_category": "runtime_error",
+      "expected_summary": "ValueError: invalid literal for int() with base 10: 'not-a-number'",
+      "expected_suggestion": "Inspect function arguments and variable types leading up to the failure."
+    },
+    {
+      "id": "python_key_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "print({}['missing'])"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    print({}['missing'])\n          ~~^^^^^^^^^^^\nKeyError: 'missing'",
+      "expected_category": "runtime_error",
+      "expected_summary": "KeyError: 'missing'",
+      "expected_suggestion": "Inspect function arguments and variable types leading up to the failure."
+    },
+    {
+      "id": "python_index_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "print([][0])"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    print([][0])\n          ~~^^^\nIndexError: list index out of range",
+      "expected_category": "runtime_error",
+      "expected_summary": "IndexError: list index out of range",
+      "expected_suggestion": "Inspect function arguments and variable types leading up to the failure."
+    },
+    {
+      "id": "python_attribute_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "None.missing"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    None.missing\nAttributeError: 'NoneType' object has no attribute 'missing'",
+      "expected_category": "runtime_error",
+      "expected_summary": "AttributeError: 'NoneType' object has no attribute 'missing'",
+      "expected_suggestion": "Inspect function arguments and variable types leading up to the failure."
+    },
+    {
+      "id": "python_assertion",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "assert False, 'expected progress 100'"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    assert False, 'expected progress 100'\n           ^^^^^\nAssertionError: expected progress 100",
+      "expected_category": "test_failure",
+      "expected_summary": "Automated test suite failed assertions",
+      "expected_suggestion": "Inspect the failing test cases in the test runner output and verify expected values."
+    },
+    {
+      "id": "python_memory_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "raise MemoryError('allocation failed')"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    raise MemoryError('allocation failed')\nMemoryError: allocation failed",
+      "expected_category": "out_of_memory",
+      "expected_summary": "Process ran out of memory (MemoryError)",
+      "expected_suggestion": "Reduce memory usage, decrease batch sizes, or increase system swap/memory limits."
+    },
+    {
+      "id": "python_connection_refused",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "import socket; socket.create_connection(('127.0.0.1', 1), timeout=0.4)"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import socket; socket.create_connection(('127.0.0.1', 1), timeout=0.4)\n                   ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 868, in create_connection\n    raise exceptions[0]\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 853, in create_connection\n    sock.connect(sa)\n    ~~~~~~~~~~~~^^^^\nConnectionRefusedError: [Errno 61] Connection refused",
+      "expected_category": "network_error",
+      "expected_summary": "Network connection error (ConnectionRefusedError)",
+      "expected_suggestion": "Check internet connection, DNS resolution, and target server availability."
+    },
+    {
+      "id": "python_receiver_url_error",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9', timeout=0.4)"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 1331, in do_open\n    h.request(req.get_method(), req.selector, req.data, headers,\n    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n              encode_chunked=req.has_header('Transfer-encoding'))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1386, in request\n    self._send_request(method, url, body, headers, encode_chunked)\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1432, in _send_request\n    self.endheaders(body, encode_chunked=encode_chunked)\n    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1381, in endheaders\n    self._send_output(message_body, encode_chunked=encode_chunked)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1141, in _send_output\n    self.send(msg)\n    ~~~~~~~~~^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1085, in send\n    self.connect()\n    ~~~~~~~~~~~~^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py\", line 1051, in connect\n    self.sock = self._create_connection(\n                ~~~~~~~~~~~~~~~~~~~~~~~^\n        (self.host,self.port), self.timeout, self.source_address)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 868, in create_connection\n    raise exceptions[0]\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 853, in create_connection\n    sock.connect(sa)\n    ~~~~~~~~~~~~^^^^\nConnectionRefusedError: [Errno 61] Connection refused\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import urllib.request; urllib.request.urlopen('http://127.0.0.1:9', timeout=0.4)\n                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 189, in urlopen\n    return opener.open(url, data, timeout)\n           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 489, in open\n    response = self._open(req, data)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 506, in _open\n    result = self._call_chain(self.handle_open, protocol, protocol +\n                              '_open', req)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 466, in _call_chain\n    result = func(*args)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 1360, in http_open\n    return self.do_open(http.client.HTTPConnection, req)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py\", line 1334, in do_open\n    raise URLError(err)\nurllib.error.URLError: <urlopen error [Errno 61] Connection refused>",
+      "expected_category": "network_error",
+      "expected_summary": "Network connection error (ConnectionRefusedError)",
+      "expected_suggestion": "Check internet connection, DNS resolution, and target server availability."
+    },
+    {
+      "id": "python_missing_binary",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-c",
+        "import os; os.execvp('still-loading-missing-bin', ['still-loading-missing-bin'])"
+      ],
+      "exit_code": 1,
+      "log": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import os; os.execvp('still-loading-missing-bin', ['still-loading-missing-bin'])\n               ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 612, in execvp\n  File \"<frozen os>\", line 654, in _execvpe\n  File \"<frozen os>\", line 645, in _execvpe\nFileNotFoundError: [Errno 2] No such file or directory",
+      "expected_category": "generic_error",
+      "expected_summary": "Error (exit 1): FileNotFoundError: [Errno 2] No such file or directory",
+      "expected_suggestion": "Review the trailing error excerpt above to identify and fix the issue."
+    },
+    {
+      "id": "script_not_executable",
+      "source": "captured_process",
+      "command": [
+        "not_executable.sh"
+      ],
+      "exit_code": 126,
+      "log": "PermissionError: [Errno 13] Permission denied: '/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/not_executable.sh'",
+      "expected_category": "permission_denied",
+      "expected_summary": "Permission denied: /var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/not_executable.sh",
+      "expected_suggestion": "Verify read/write permissions or run with the required user privileges."
+    },
+    {
+      "id": "node_missing_module",
+      "source": "captured_process",
+      "command": [
+        "node",
+        "-e",
+        "require('module-that-does-not-exist-still-loading')"
+      ],
+      "exit_code": 1,
+      "log": "node:internal/modules/cjs/loader:1573\n  throw err;\n  ^\n\nError: Cannot find module 'module-that-does-not-exist-still-loading'\nRequire stack:\n- /private/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/[eval]\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1569:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1123:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1147:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1174:12)\n    at Module._load (node:internal/modules/cjs/loader:1346:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.require (node:internal/modules/cjs/loader:1679:12)\n    at require (node:internal/modules/helpers:196:16)\n    at [eval]:1:1\n    at runScriptInThisContext (node:internal/vm:219:10) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [\n    '/private/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/[eval]'\n  ]\n}\n\nNode.js v26.8.1",
+      "expected_category": "missing_dependency",
+      "expected_summary": "Missing Node.js module: 'module-that-does-not-exist-still-loading'",
+      "expected_suggestion": "Install it with 'npm install module-that-does-not-exist-still-loading' or 'yarn add module-that-does-not-exist-still-loading'."
+    },
+    {
+      "id": "git_not_a_repository",
+      "source": "captured_process",
+      "command": [
+        "git",
+        "-C",
+        "not-a-git-repo",
+        "status"
+      ],
+      "exit_code": 128,
+      "log": "fatal: not a git repository (or any of the parent directories): .git",
+      "expected_category": "git_error",
+      "expected_summary": "Not a git repository",
+      "expected_suggestion": "Run 'git init' or change directory to a valid git repository."
+    },
+    {
+      "id": "python_unittest_failure",
+      "source": "captured_process",
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "-m",
+        "unittest",
+        "test_fail_sample"
+      ],
+      "exit_code": 1,
+      "log": "F\n======================================================================\nFAIL: test_progress (test_fail_sample.Sample.test_progress)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/var/folders/rl/_jrrb0zn5w144rxb902slgb40000gn/T/still-loading-baseline-ngm7j0n2/test_fail_sample.py\", line 4, in test_progress\n    self.assertEqual(1, 2)\n    ~~~~~~~~~~~~~~~~^^^^^^\nAssertionError: 1 != 2\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (failures=1)",
+      "expected_category": "test_failure",
+      "expected_summary": "Automated test suite failed assertions",
+      "expected_suggestion": "Inspect the failing test cases in the test runner output and verify expected values."
+    }
+  ]
+}

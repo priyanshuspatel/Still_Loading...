@@ -1,0 +1,29 @@
+[Unit]
+Description=Still Loading... Arduino UNO Q Receiver Daemon
+Documentation=https://github.com/priyanshuspatel/Still_Loading...
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arduino
+Group=arduino
+WorkingDirectory=/home/arduino/still-loading
+# Optional environment file containing STILL_LOADING_TOKEN
+EnvironmentFile=-/home/arduino/still-loading/.env
+EnvironmentFile=-/etc/still-loading/receiver.env
+ExecStart=/usr/bin/python3 uno-q/receiver.py --host 0.0.0.0 --port 8090
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=still-loading-receiver
+
+# Process sandboxing & security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/arduino/still-loading /tmp
+
+[Install]
+WantedBy=multi-user.target

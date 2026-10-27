@@ -138,7 +138,7 @@ def validate_message(message: dict) -> dict:
     if missing:
         _reject("missing_field", "Message is missing " + ", ".join(missing))
 
-    allowed = set(REQUIRED_FIELDS) | OPTIONAL_FIELDS | {"message", "exit_code"}
+    allowed = set(REQUIRED_FIELDS) | OPTIONAL_FIELDS | {"message", "exit_code", "excerpt", "explanation"}
     unknown = sorted(set(message) - allowed)
     if unknown:
         _reject("unknown_field", "Message has unknown fields: " + ", ".join(unknown))
@@ -207,6 +207,25 @@ def validate_message(message: dict) -> dict:
         exit_code = _require_int(message.get("exit_code"), "exit_code")
         if exit_code == 0:
             _reject("invalid_field", "failed events must use a non-zero exit_code")
+        excerpt = message.get("excerpt")
+        if excerpt is not None:
+            if not isinstance(excerpt, str):
+                _reject("invalid_field", "excerpt must be a string when present")
+            if len(excerpt) > 512:
+                _reject("invalid_field", "excerpt must be 512 characters or fewer")
+        explanation = message.get("explanation")
+        if explanation is not None:
+            if not isinstance(explanation, dict):
+                _reject("invalid_field", "explanation must be an object when present")
+            category = explanation.get("category")
+            if not isinstance(category, str) or not category or len(category) > 64:
+                _reject("invalid_field", "explanation category must be a short string")
+            summary = explanation.get("summary")
+            if not isinstance(summary, str) or not summary or len(summary) > 256:
+                _reject("invalid_field", "explanation summary must be a string up to 256 characters")
+            suggestion = explanation.get("suggestion")
+            if not isinstance(suggestion, str) or len(suggestion) > 512:
+                _reject("invalid_field", "explanation suggestion must be a string up to 512 characters")
     elif event == "completed":
         if message["is_failure"] is not False:
             _reject("invalid_field", "completed events must set is_failure to false")
@@ -216,11 +235,19 @@ def validate_message(message: dict) -> dict:
             _reject("invalid_field", "completed events must use exit_code 0")
         if "message" in message:
             _reject("unknown_field", "completed events do not take a message")
+        if "excerpt" in message:
+            _reject("unknown_field", "completed events do not take excerpt")
+        if "explanation" in message:
+            _reject("unknown_field", "completed events do not take explanation")
     else:
         if message["is_failure"] is not False:
             _reject("invalid_field", "only failed events may set is_failure to true")
         if "message" in message or "exit_code" in message:
             _reject("unknown_field", f"{event} events do not take message or exit_code")
+        if "excerpt" in message:
+            _reject("unknown_field", f"{event} events do not take excerpt")
+        if "explanation" in message:
+            _reject("unknown_field", f"{event} events do not take explanation")
 
     return message
 
@@ -445,9 +472,28 @@ class JobLog:
             found = self._events.get(job_id)
             if not found:
                 return None
-            return {
+            latest = found[-1]
+            result = {
                 "job_id": job_id,
                 "accepted_count": len(found),
                 "highest_sequence": self._highest[job_id],
-                "latest": found[-1],
+                "latest": latest,
             }
+            excerpt = latest.get("excerpt")
+            if excerpt is not None:
+                result["excerpt"] = excerpt
+            explanation = latest.get("explanation")
+            if explanation is not None:
+                result["explanation"] = explanation
+            elif latest.get("event") == "failed":
+                try:
+                    from explainer import explain_failure
+
+                    result["explanation"] = explain_failure(
+                        exit_code=latest.get("exit_code", 1),
+                        message=latest.get("message", ""),
+                        excerpt=latest.get("excerpt"),
+                    ).to_dict()
+                except Exception:
+                    pass
+            return result

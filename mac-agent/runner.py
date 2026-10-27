@@ -10,6 +10,8 @@ text stay on the Mac. They are not fields the board accepts.
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 import subprocess
 import threading
@@ -22,6 +24,19 @@ from simulator import format_timestamp, new_job_id
 
 MAX_CAPTURE_BYTES = 256 * 1024
 _PERCENT = re.compile(r"(?<!\d)(100|[1-9]?\d)%")
+
+try:
+    from excerpt import safe_excerpt_for_event
+except ImportError:
+    # On the UNO Q the excerpt module may not be present.
+    def safe_excerpt_for_event(stdout, stderr, **kwargs):
+        return None
+
+try:
+    from explainer import explain_failure
+except ImportError:
+    def explain_failure(exit_code=1, message="", excerpt=None):
+        return None
 
 
 @dataclass
@@ -127,14 +142,59 @@ def _read_pipe(pipe, store: bytearray, truncated: list[bool], on_line) -> None:
         pipe.close()
 
 
-def _finish_failed(emitter: _Emitter, exit_code: int, message: str) -> None:
-    emitter.send(
-        "failed",
-        progress=emitter.progress,
-        is_failure=True,
-        exit_code=exit_code,
-        message=message,
-    )
+def _finish_failed(
+    emitter: _Emitter,
+    exit_code: int,
+    message: str,
+    stdout: str = "",
+    stderr: str = "",
+    include_excerpt: bool = True,
+) -> None:
+    extras: dict = {
+        "progress": emitter.progress,
+        "is_failure": True,
+        "exit_code": exit_code,
+        "message": message,
+    }
+    excerpt = None
+    if include_excerpt:
+        excerpt = safe_excerpt_for_event(stdout, stderr)
+        if excerpt is not None:
+            extras["excerpt"] = excerpt
+    explanation = _explanation_for_failure(exit_code, message, excerpt)
+    if explanation is not None:
+        extras["explanation"] = explanation
+    emitter.send("failed", **extras)
+
+
+def _gemma_enabled() -> bool:
+    return os.environ.get("GEMMA_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _explanation_for_failure(exit_code: int, message: str, excerpt: str | None) -> dict | None:
+    """Rules explanation, or a verified Gemma diagnosis when GEMMA_ENABLED is set.
+
+    Gemma is skipped unless the operator opts in. A model failure becomes the
+    rules explanation and does not stop the failed event.
+    """
+    if _gemma_enabled():
+        try:
+            from gemma_analysis import analyze_failure_logs
+
+            return analyze_failure_logs(
+                excerpt or "",
+                exit_code=exit_code,
+                message=message,
+                failure_status="failed",
+            ).to_explanation_dict()
+        except Exception:
+            logging.getLogger("still_loading.gemma").exception(
+                "gemma analysis failed closed; using rules explainer"
+            )
+    exp = explain_failure(exit_code=exit_code, message=message, excerpt=excerpt)
+    if exp is None:
+        return None
+    return exp.to_dict()
 
 
 def run_process(
@@ -143,6 +203,7 @@ def run_process(
     heartbeat_interval: float = 2.0,
     job_id: str | None = None,
     emit=None,
+    include_excerpt: bool = True,
 ) -> ProcessRun:
     """Start ``argv`` and return its local record plus protocol events.
 
@@ -218,7 +279,14 @@ def run_process(
         stdout_thread.join()
         stderr_thread.join()
         stopped = process.returncode if process.returncode not in (None, 0) else 130
-        _finish_failed(emitter, stopped, "Stopped by the user")
+        _finish_failed(
+            emitter,
+            stopped,
+            "Stopped by the user",
+            stdout_buf.decode("utf-8", errors="replace"),
+            stderr_buf.decode("utf-8", errors="replace"),
+            include_excerpt=include_excerpt,
+        )
         return _record(
             emitter,
             process.pid,
@@ -235,12 +303,26 @@ def run_process(
     exit_code = process.returncode
     if exit_code is None:
         exit_code = 130
-        _finish_failed(emitter, exit_code, "Process ended without an exit code")
+        _finish_failed(
+            emitter,
+            exit_code,
+            "Process ended without an exit code",
+            stdout_buf.decode("utf-8", errors="replace"),
+            stderr_buf.decode("utf-8", errors="replace"),
+            include_excerpt=include_excerpt,
+        )
     elif exit_code == 0:
         emitter.progress = 100
         emitter.send("completed", progress=100, exit_code=0)
     else:
-        _finish_failed(emitter, exit_code, f"Process exited with code {exit_code}")
+        _finish_failed(
+            emitter,
+            exit_code,
+            f"Process exited with code {exit_code}",
+            stdout_buf.decode("utf-8", errors="replace"),
+            stderr_buf.decode("utf-8", errors="replace"),
+            include_excerpt=include_excerpt,
+        )
 
     return _record(
         emitter,

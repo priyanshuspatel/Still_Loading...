@@ -96,6 +96,19 @@ export function normalizeLiveTelemetry(raw: any): TelemetrySnapshot {
     latencyMs: raw.connection?.latencyMs,
   };
 
+  const job = raw.job
+    ? {
+        job_id: raw.job.job_id,
+        event: raw.job.event,
+        progress: typeof raw.job.progress === 'number' ? raw.job.progress : 0,
+        exit_code: raw.job.exit_code,
+        is_failure: Boolean(raw.job.is_failure),
+        message: raw.job.message,
+        excerpt: raw.job.excerpt || null,
+        explanation: raw.job.explanation || null,
+      }
+    : null;
+
   return {
     timestamp: rawTs,
     is_live: true,
@@ -103,6 +116,7 @@ export function normalizeLiveTelemetry(raw: any): TelemetrySnapshot {
     battery,
     download,
     lights,
+    job,
     connection,
     is_stale: isStale,
     last_updated_text: formatRelativeTime(rawTs),

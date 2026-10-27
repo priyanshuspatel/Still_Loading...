@@ -5,6 +5,29 @@ export default {
   theme: {
     extend: {
       colors: {
+        alabaster: {
+          50: '#FCFBF9',
+          100: '#F6F5F1',
+          200: '#EFECE6',
+          300: '#E2DFD7',
+          400: '#C8C4B8',
+          500: '#8C887E',
+        },
+        ink: {
+          950: '#0B0D10',
+          900: '#111317',
+          800: '#1E2229',
+          700: '#323842',
+          600: '#525866',
+          500: '#747B8A',
+          400: '#9BA1AE',
+        },
+        cobalt: {
+          600: '#0052FF',
+          700: '#0040CC',
+          500: '#1A66FF',
+          50: '#EDF3FF',
+        },
         graphite: {
           950: '#090b0c',
           900: '#0f1215',
@@ -34,17 +57,23 @@ export default {
       },
       fontFamily: {
         sans: [
+          '"Plus Jakarta Sans"',
+          '"Inter"',
           '-apple-system',
           'BlinkMacSystemFont',
           '"SF Pro Display"',
           '"SF Pro Text"',
-          '"Inter"',
           'system-ui',
           'sans-serif',
         ],
+        serif: [
+          '"Instrument Serif"',
+          'Georgia',
+          'serif',
+        ],
         mono: [
-          '"SF Mono"',
           '"JetBrains Mono"',
+          '"SF Mono"',
           '"Fira Code"',
           'ui-monospace',
           'monospace',
@@ -55,17 +84,24 @@ export default {
         'led-amber-glow': '0 0 12px rgba(251, 191, 36, 0.55)',
         'led-red-glow': '0 0 12px rgba(248, 113, 113, 0.55)',
         'led-green-glow': '0 0 12px rgba(74, 222, 128, 0.55)',
-        'matrix-case': 'inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 8px 30px rgba(0, 0, 0, 0.7)',
-        'panel': '0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+        'matrix-case': 'inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 20px 50px -12px rgba(17, 19, 23, 0.16), 0 4px 12px -2px rgba(17, 19, 23, 0.08)',
+        'panel': '0 1px 2px rgba(17, 19, 23, 0.04), 0 8px 24px -8px rgba(17, 19, 23, 0.06)',
+        'panel-hover': '0 4px 12px rgba(17, 19, 23, 0.06), 0 20px 36px -12px rgba(17, 19, 23, 0.1)',
+        'tactile-btn': '0 1px 2px rgba(17, 19, 23, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
       },
       animation: {
         'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'blink-cursor': 'blink 1s step-end infinite',
+        'signal-flow': 'signalFlow 2.4s linear infinite',
       },
       keyframes: {
         blink: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0' },
+        },
+        signalFlow: {
+          '0%': { strokeDashoffset: '24' },
+          '100%': { strokeDashoffset: '0' },
         },
       },
     },

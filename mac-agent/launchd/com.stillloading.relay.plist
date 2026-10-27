@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillloading.relay</string>
+    <key>Comment</key>
+    <string>Background macOS telemetry relay service for Still Loading...</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>relay/telemetry_relay.py</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>8765</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>REPLACE_WITH_REPO_DIR</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>STILL_LOADING_TOKEN</key>
+        <string>REPLACE_WITH_BEARER_TOKEN</string>
+        <key>UNO_Q_RECEIVER_URL</key>
+        <string>http://192.168.1.5:8090</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/still-loading-relay.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/still-loading-relay.err</string>
+</dict>
+</plist>

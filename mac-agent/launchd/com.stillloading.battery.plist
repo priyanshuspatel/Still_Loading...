@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillloading.battery</string>
+    <key>Comment</key>
+    <string>Background macOS battery telemetry agent for Still Loading...</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>mac-agent/battery_monitor.py</string>
+        <string>--config</string>
+        <string>mac-agent/config.local.json</string>
+        <string>--interval</string>
+        <string>15</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>REPLACE_WITH_REPO_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/still-loading-battery.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/still-loading-battery.err</string>
+</dict>
+</plist>

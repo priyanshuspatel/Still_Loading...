@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,6 +26,8 @@ from messages import ProtocolError  # noqa: E402
 from runner import run_process  # noqa: E402
 from send_events import resolve_target  # noqa: E402
 from sender import post_event  # noqa: E402
+import audio  # noqa: E402
+import notifications  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,6 +50,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--token", default=None)
     parser.add_argument("--config", default=None)
     parser.add_argument(
+        "--no-excerpt",
+        action="store_true",
+        help="Do not attach a failure log excerpt to the failed event.",
+    )
+    parser.add_argument(
+        "--gemma",
+        action="store_true",
+        help=(
+            "After a failure, ask the configured Gemma endpoint to explain the redacted log. "
+            "The rules explainer is used if Gemma times out or returns unverifiable output. "
+            "Same as GEMMA_ENABLED=1."
+        ),
+    )
+    parser.add_argument(
+        "--bell",
+        action="store_true",
+        help=(
+            "Play a macOS system sound on completion or failure. "
+            "Requires afplay (available by default on macOS). "
+            "Glass.aiff plays on success; Basso.aiff plays on failure; "
+            "Tink.aiff plays twice when a suspected stall is detected."
+        ),
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help=(
+            "Display a native macOS Notification Center banner on completion or failure. "
+            "Requires osascript (available by default on macOS)."
+        ),
+    )
+    parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
         help="Program and arguments. Put them after -- .",
@@ -62,6 +97,8 @@ def command_argv(raw: list[str]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.gemma:
+        os.environ["GEMMA_ENABLED"] = "1"
     command = command_argv(args.command)
     if not command:
         print("Pass a command after -- . Example: python3 run_job.py -- python3 -c \"print(1)\"", file=sys.stderr)
@@ -96,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             heartbeat_interval=args.heartbeat,
             job_id=args.job_id,
             emit=emit,
+            include_excerpt=not args.no_excerpt,
         )
     except (TypeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -111,6 +149,47 @@ def main(argv: list[str] | None = None) -> int:
         f"stderr_bytes={len(record.stderr.encode('utf-8'))}",
         file=sys.stderr,
     )
+    if record.exit_code != 0:
+        failed_event = next((e for e in reversed(record.events) if e.get("event") == "failed"), None)
+        if failed_event and "explanation" in failed_event:
+            exp = failed_event["explanation"]
+            status = exp.get("verification_status")
+            status_line = f"\n                      Gemma status: {status}" if status else ""
+            print(
+                f"[Failure Explanation] ({exp.get('category')}): {exp.get('summary')}\n"
+                f"                      Suggestion: {exp.get('suggestion')}"
+                f"{status_line}",
+                file=sys.stderr,
+            )
+
+    # Ambient audio cue — only when --bell is requested
+    if args.bell:
+        if not audio.is_available():
+            print(
+                "[audio] --bell requested but afplay is not available on this platform.",
+                file=sys.stderr,
+            )
+        elif record.exit_code == 0:
+            audio.play_completed()
+        else:
+            audio.play_failed()
+
+    # Native desktop notification — only when --notify is requested
+    if args.notify:
+        if not notifications.is_available():
+            print(
+                "[notify] --notify requested but osascript is not available on this platform.",
+                file=sys.stderr,
+            )
+        elif record.exit_code == 0:
+            notifications.notify_completed(record.job_id, record.elapsed_seconds)
+        else:
+            summary = None
+            failed_event = next((e for e in reversed(record.events) if e.get("event") == "failed"), None)
+            if failed_event and "explanation" in failed_event:
+                summary = failed_event["explanation"].get("summary")
+            notifications.notify_failed(record.job_id, record.elapsed_seconds, summary=summary)
+
     return 0 if record.exit_code == 0 else 1
 
 
