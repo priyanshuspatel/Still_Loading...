@@ -12,6 +12,8 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,7 +30,13 @@ from gemma_analysis import (  # noqa: E402
     parse_gemma_output,
     redact_for_model,
 )
-from gemma_client import GemmaClient, GemmaConfig, GemmaTimeout, GemmaUnavailable  # noqa: E402
+from gemma_client import (  # noqa: E402
+    GemmaClient,
+    GemmaConfig,
+    GemmaTimeout,
+    GemmaUnavailable,
+    resolve_control_gemma_config,
+)
 from history_store import HistoryStore  # noqa: E402
 from matrix_display import select_display_frame  # noqa: E402
 from messages import validate_message  # noqa: E402
@@ -655,6 +663,33 @@ class RelayCardTests(unittest.TestCase):
         self.assertEqual(job["explanation"]["verification_status"], "verified")
         self.assertEqual(job["explanation"]["evidence"][0]["log_line"], REAL_LINE)
         self.assertNotEqual(job["explanation"]["diagnosis"], job["explanation"]["evidence"][0]["log_line"])
+
+
+class ResolveControlGemmaTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        os.environ.pop("GEMMA_ENABLED", None)
+
+    def test_unset_uses_a_reachable_local_endpoint(self) -> None:
+        os.environ.pop("GEMMA_ENABLED", None)
+        with patch("gemma_client.urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
+            cfg = resolve_control_gemma_config()
+        self.assertTrue(cfg.enabled)
+        self.assertEqual(cfg.base_url, "http://127.0.0.1:11434/v1")
+        self.assertEqual(cfg.model, "gemma2:2b")
+
+    def test_explicit_off_does_not_probe(self) -> None:
+        os.environ["GEMMA_ENABLED"] = "0"
+        with patch("gemma_client.urllib.request.urlopen") as urlopen:
+            cfg = resolve_control_gemma_config()
+        urlopen.assert_not_called()
+        self.assertFalse(cfg.enabled)
+
+    def test_unreachable_endpoint_stays_disabled(self) -> None:
+        os.environ.pop("GEMMA_ENABLED", None)
+        with patch("gemma_client.urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+            cfg = resolve_control_gemma_config()
+        self.assertFalse(cfg.enabled)
 
 
 if __name__ == "__main__":

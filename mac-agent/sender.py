@@ -281,3 +281,50 @@ def post_display_mode(
             "body": {"reason": "connection_error", "detail": str(exc.reason)},
         }
 
+
+def post_session_reset(
+    base_url: str,
+    token: str,
+    target: str = "auto",
+    timeout: float = 2.0,
+) -> dict:
+    """POST /v1/session/reset so the receiver drops the focused job and download."""
+    body = json.dumps({"target": target}).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/session/reset",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return {
+                "delivery": "ok",
+                "delivered": response.status == 200,
+                "http_status": response.status,
+                "body": payload,
+            }
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {"detail": raw[:200]}
+        return {
+            "delivery": "unauthorized" if exc.code == 401 else "rejected",
+            "delivered": False,
+            "http_status": exc.code,
+            "body": payload,
+        }
+    except urllib.error.URLError as exc:
+        return {
+            "delivery": "connection_error",
+            "delivered": False,
+            "http_status": None,
+            "body": {"reason": "connection_error", "detail": str(exc.reason)},
+        }
+

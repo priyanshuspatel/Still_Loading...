@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "tsx src/lib/matrixEngine.test.ts && tsx src/lib/gemmaCard.test.ts"
+    "test": "tsx src/lib/matrixEngine.test.ts && tsx src/lib/gemmaCard.test.ts && tsx src/lib/controlDeckModel.test.ts && tsx src/components/ControlDeck.render.test.tsx"
   },
   "dependencies": {
     "clsx": "^2.1.1",

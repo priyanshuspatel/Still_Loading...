@@ -190,6 +190,28 @@ class StateEngine:
             self._on_change(notify)
         return self.view
 
+    def session_command(self, target: str) -> LightView:
+        """Clear the focused job and download.
+
+        ``idle`` forces the job display so the matrix shows the idle pattern.
+        ``auto`` restores automatic priority (download, then job, then battery).
+        """
+        if target not in {"idle", "auto"}:
+            raise ProtocolError(
+                400,
+                "invalid_field",
+                "target must be idle or auto",
+            )
+        notify: LightView | None = None
+        with self._lock:
+            self._download = None
+            self._focus = None
+            self._display_mode = "job" if target == "idle" else "auto"
+            notify = self._stage("session_" + target)
+        if notify is not None and self._on_change is not None:
+            self._on_change(notify)
+        return self.view
+
     def apply_battery(self, message: dict) -> LightView:
         """Record one validated Mac battery reading without touching any job."""
         checked = validate_battery_message(message)

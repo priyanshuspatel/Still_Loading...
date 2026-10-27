@@ -204,12 +204,14 @@ def run_process(
     job_id: str | None = None,
     emit=None,
     include_excerpt: bool = True,
+    cancel: threading.Event | None = None,
 ) -> ProcessRun:
     """Start ``argv`` and return its local record plus protocol events.
 
     ``emit`` is called with each validated event as it happens. Heartbeats
     continue while the process is alive, including when both pipes are empty.
     Exit code 0 becomes ``completed``. Any other exit becomes ``failed``.
+    When ``cancel`` is set, the process is terminated and recorded as failed.
     """
     command = _check_argv(argv)
     if heartbeat_interval <= 0:
@@ -264,6 +266,34 @@ def run_process(
     next_heartbeat = heartbeat_interval
     try:
         while process.poll() is None:
+            if cancel is not None and cancel.is_set():
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
+                stdout_thread.join()
+                stderr_thread.join()
+                stopped = process.returncode if process.returncode not in (None, 0) else 130
+                _finish_failed(
+                    emitter,
+                    stopped,
+                    "Stopped from the Control Deck",
+                    stdout_buf.decode("utf-8", errors="replace"),
+                    stderr_buf.decode("utf-8", errors="replace"),
+                    include_excerpt=include_excerpt,
+                )
+                return _record(
+                    emitter,
+                    process.pid,
+                    started_at,
+                    stopped,
+                    stdout_buf,
+                    stderr_buf,
+                    stdout_cut[0],
+                    stderr_cut[0],
+                )
             now = time.monotonic() - origin
             if now >= next_heartbeat:
                 emitter.send("heartbeat")

@@ -252,8 +252,8 @@ def analyze_failure_logs(
             detail="timeout",
             fallback_used=True,
         )
-    except GemmaUnavailable:
-        logger.info("gemma result status=unavailable")
+    except GemmaUnavailable as exc:
+        logger.info("gemma result status=unavailable reason=%s", exc)
         return _from_rules(
             rules,
             failure_status=failure_status,

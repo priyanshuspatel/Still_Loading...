@@ -9,11 +9,13 @@ import { TechnicalSpecs } from './components/TechnicalSpecs';
 import { AboutSection } from './components/AboutSection';
 import { Footer } from './components/Footer';
 import { LiveConnectionModal } from './components/LiveConnectionModal';
+import { ControlDeck } from './components/ControlDeck';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<'home' | 'dashboard' | 'architecture' | 'about'>('home');
   const [isLiveMode, setIsLiveMode] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [developerDashboard, setDeveloperDashboard] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#FBFBFD] dark:bg-[#0B0C0E] text-[#1D1D1F] dark:text-[#F5F5F7] flex flex-col font-sans selection:bg-[#0066CC]/15 selection:text-[#0066CC] transition-colors duration-300">
@@ -47,12 +49,23 @@ export function App() {
 
         {currentTab === 'dashboard' && (
           <div className="pt-20 pb-20 space-y-6 bg-[#F5F5F7] dark:bg-[#121418]">
-            <LiveDashboard
-              isLiveMode={isLiveMode}
-              setIsLiveMode={setIsLiveMode}
-              onOpenSettingsModal={() => setIsSettingsOpen(true)}
-            />
-            <JobHistory isLiveMode={isLiveMode} />
+            {developerDashboard ? (
+              <>
+                <div className="max-w-7xl mx-auto px-4">
+                  <button type="button" className="deck-button" onClick={() => setDeveloperDashboard(false)}>
+                    Back to Control Deck
+                  </button>
+                </div>
+                <LiveDashboard
+                  isLiveMode={isLiveMode}
+                  setIsLiveMode={setIsLiveMode}
+                  onOpenSettingsModal={() => setIsSettingsOpen(true)}
+                />
+                <JobHistory isLiveMode={isLiveMode} />
+              </>
+            ) : (
+              <ControlDeck onOpenDeveloper={() => setDeveloperDashboard(true)} />
+            )}
           </div>
         )}
 

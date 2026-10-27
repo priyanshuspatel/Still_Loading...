@@ -21,6 +21,8 @@ Transforms invisible digital waiting (MacBook battery charging state and Chrome 
 - **Icons:** Lucide Icons
 - **Typography:** Inter + JetBrains Mono
 
+The Control Deck on the dashboard tab sends allowlisted actions to `mac-agent/control_deck.py` on port 8080. Vite proxies `/v1` there. The developer dashboard remains one click away. See `CONTROL_DECK.md`.
+
 ## Getting Started
 
 ### Install Dependencies

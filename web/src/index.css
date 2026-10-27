@@ -76,6 +76,49 @@
     background-color: var(--bg-surface);
   }
 
+  .deck-button {
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    padding: 0.45rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .deck-button:hover:not(:disabled) {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+  }
+
+  .deck-button:disabled {
+    opacity: 0.55;
+  }
+
+  .deck-button[data-phase='running'] {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+  }
+
+  .deck-button[data-phase='success'] {
+    border-color: #059669;
+    color: #047857;
+  }
+
+  .deck-button[data-phase='error'] {
+    border-color: #dc2626;
+    color: #b91c1c;
+  }
+
+  html.dark .deck-button[data-phase='success'] {
+    color: #6ee7b7;
+  }
+
+  html.dark .deck-button[data-phase='error'] {
+    color: #fca5a5;
+  }
+
   .arch-cell-stone {
     background-color: var(--bg-stone);
   }

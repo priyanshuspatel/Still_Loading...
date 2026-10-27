@@ -301,13 +301,19 @@ def make_handler(
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
             path = self.path.split("?", 1)[0]
-            if path not in {"/v1/events", "/v1/battery", "/v1/display-mode", "/v1/download"}:
+            if path not in {
+                "/v1/events",
+                "/v1/battery",
+                "/v1/display-mode",
+                "/v1/download",
+                "/v1/session/reset",
+            }:
                 self._send(
                     404,
                     {
                         "status": "not_found",
                         "reason": "unknown_path",
-                        "detail": "POST messages to /v1/events, /v1/battery, /v1/download, or /v1/display-mode",
+                        "detail": "POST messages to /v1/events, /v1/battery, /v1/download, /v1/display-mode, or /v1/session/reset",
                     },
                 )
                 return
@@ -376,6 +382,42 @@ def make_handler(
                         "percent": checked["percent"],
                         "charging_state": checked["charging_state"],
                         "display_mode": "auto" if engine is None else engine.display_mode,
+                    },
+                )
+                return
+
+            if path == "/v1/session/reset":
+                unknown = sorted(set(message) - {"target"})
+                if unknown:
+                    self._send(
+                        400,
+                        {
+                            "status": "rejected",
+                            "reason": "unknown_field",
+                            "detail": "session reset accepts only target",
+                        },
+                    )
+                    return
+                target = message.get("target", "auto")
+                try:
+                    if engine is not None:
+                        engine.session_command(target)
+                    elif target not in {"idle", "auto"}:
+                        raise ProtocolError(400, "invalid_field", "target must be idle or auto")
+                except ProtocolError as exc:
+                    self._send(
+                        exc.status,
+                        {"status": "rejected", "reason": exc.reason, "detail": exc.detail},
+                    )
+                    return
+                if announce:
+                    print(f"session reset target={target}", flush=True)
+                self._send(
+                    200,
+                    {
+                        "status": "ok",
+                        "target": target,
+                        "lights": _lights_body(engine),
                     },
                 )
                 return

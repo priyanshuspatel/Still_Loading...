@@ -15,7 +15,7 @@ import os
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 logger = logging.getLogger("still_loading.gemma")
 
@@ -66,6 +66,42 @@ class GemmaConfig:
             max_retries=max(0, retries),
             max_log_chars=max(200, max_log),
         )
+
+
+def endpoint_answers(base_url: str, timeout_s: float = 1.5) -> bool:
+    """True when the OpenAI-compatible server accepts a connection.
+
+    An HTTP error still counts: the process is up. A connection failure does not.
+    """
+    url = base_url.rstrip("/") + "/models"
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            response.read()
+        return True
+    except urllib.error.HTTPError:
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def resolve_control_gemma_config() -> GemmaConfig:
+    """Config for the Control Deck.
+
+    An explicit ``GEMMA_ENABLED`` value wins. When the variable is unset, a
+    reachable local endpoint is used with the existing default URL and model.
+    """
+    cfg = GemmaConfig.from_env()
+    if os.environ.get("GEMMA_ENABLED") is not None:
+        return cfg
+    if endpoint_answers(cfg.base_url):
+        logger.info(
+            "gemma control deck using reachable endpoint model=%s url=%s",
+            cfg.model,
+            cfg.base_url,
+        )
+        return replace(cfg, enabled=True)
+    return cfg
 
 
 class GemmaClient:
@@ -136,7 +172,7 @@ class GemmaClient:
                     "gemma unavailable model=%s attempt=%s error=%s",
                     self.config.model,
                     attempt + 1,
-                    exc.__class__.__name__,
+                    exc,
                 )
             if attempt + 1 >= attempts:
                 break

@@ -50,6 +50,26 @@ To forward the entire demo to your live UNO Q hardware:
 python3 demo.py --all --send --config config.local.json
 ```
 
+## Control Deck
+
+The browser Control Deck is the demonstration surface. It calls `mac-agent/control_deck.py`, which uses the existing battery reader, Chrome download monitor, job runner, and receiver. The map and the start commands are in [CONTROL_DECK.md](CONTROL_DECK.md).
+
+```bash
+cd ~/still-loading
+export STILL_LOADING_TOKEN='test-token-0123456789'
+python3 uno-q/receiver.py --host 127.0.0.1 --port 8090
+```
+
+```bash
+python3 mac-agent/control_deck.py --host 127.0.0.1 --port 8080 --upstream http://127.0.0.1:8090
+```
+
+```bash
+cd ~/still-loading/web && npm run dev
+```
+
+CLI commands such as `run_job.py`, `battery_monitor.py`, and `download_monitor.py` stay available.
+
 ## Run the simulator
 
 Python 3.11 or newer is enough. This Mac was checked with Python 3.13.17. There are no packages to install.
